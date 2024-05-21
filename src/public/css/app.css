@@ -1,0 +1,42 @@
+:root {
+    --a-color: #232323;
+    --b-color: #FFFFFF;
+
+    --primary-font: "Roboto Condensed", sans-serif;
+    --secondary-font: "Roboto", sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+    margin: 0;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body,
+html {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--primary-font);
+    background-color: var(--a-color);
+    color: var(--c-color);
+}
+
+main {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+}

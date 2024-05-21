@@ -1,0 +1,91 @@
+.start-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3rem;
+    font-size: 1rem;
+}
+
+.start-section form {
+    display: flex;
+    flex-direction: column;
+    width: 200px;
+    gap: 0.3rem
+}
+
+.start-section .input-container {
+    position: relative;
+}
+
+.start-section input[type="text"] {
+    width: 100%;
+    border: 1px solid var(--a-color);
+    border-radius: 0.5rem;
+    font-size: calc(0.9rem*19/17);
+    padding: 0.5rem 0.5rem 0.5rem 30px;
+}
+
+.start-section svg {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    left: 0px;
+    top: 50%;
+    transform: translate(50%, -50%);
+    width: calc(0.9rem*19/17);
+    height: calc(0.9rem*19/17);
+}
+
+.start-section h1 {
+    text-align: center;
+    font-size: 4rem;
+    color: var(--b-color);
+}
+
+.start-section label {
+    color: var(--b-color);
+}
+
+.start-section button {
+    width: 100%;
+    border: 3px solid var(--b-color);
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    padding: 0.5rem;
+    background-color: var(--a-color);
+    color: var(--b-color);
+    cursor: pointer;
+    transition: all .5s ease;
+}
+
+.start-section button:hover {
+    background-color: var(--b-color);
+    color: var(--a-color);
+}
+
+.spinner {
+    display: none;
+    border: 3px dotted var(--b-color);
+    height: 2.5rem;
+    width: 2.5rem;
+    border-radius: 50%;
+    animation: spin 3s linear infinite;
+}
+
+.spinner.visible {
+    display: block;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@Media(width < 500px) {
+    .start-section h1 {
+        font-size: 3.5rem;
+    }
+}

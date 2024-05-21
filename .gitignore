@@ -1,0 +1,22 @@
+# Ignoruj katalogi node_modules
+node_modules/
+
+# Ignoruj pliki wygenerowane przez TypeScript
+*.js
+*.js.map
+
+# Ignoruj pliki wygenerowane przez kompilację TypeScript
+dist/
+
+# Ignoruj pliki konfiguracyjne
+*.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Ignoruj pliki tymczasowe
+*.log
+*.pid
+*.seed
+*.pid.lock
