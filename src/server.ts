@@ -3,9 +3,24 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { User } from './models/interfaces.js';
+import { ErrorResponse, NotAllowedResponse, SuccessResponse } from './models/interfaces.js';
 
-const pool: User[] = [];
-const matched: [User, User][] = [];
+let pool: User[] = [];
+let potentialMatches: [User, User][] = [];
+let matched: [User, User][] = [];
+
+function addToPool(body: Buffer[]): Promise<User> {
+    return new Promise((resolve, reject) => {
+        try {
+            let user: User = JSON.parse(Buffer.concat(body).toString());
+            user.id = crypto.randomUUID();
+            pool.push(user);
+            resolve(user);
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
 
 function removeFromPool(userId: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -14,46 +29,124 @@ function removeFromPool(userId: string): Promise<void> {
             pool.splice(userIndex, 1);
             resolve();
         } else {
-            reject();
+            reject(`An error occurred while adding user to the pool`);
         }
     });
 }
 
+function matchUsers(userId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (pool.length < 1) {
+            reject('Not enough people in the pool.');
+        } else {
+            const user1 = pool.find(user => user.id === userId);
+            if (!user1) {
+                reject('User not found in the pool.');
+            } else {
+                const user2 = pool.find(user => user.id !== userId);
+                if (!user2) {
+                    reject('No other users to match with.');
+                } else {
+                    const existingMatch = potentialMatches.find(match =>
+                        (match[0].id === user1.id && match[1].id === user2.id) ||
+                        (match[0].id === user2.id && match[1].id === user1.id)
+                    );
+                    if (!existingMatch) {
+                        potentialMatches.push([user1, user2]);
+                    } else {
+                        potentialMatches = potentialMatches.filter(match =>
+                            !(match[0].id === user1.id && match[1].id === user2.id) &&
+                            !(match[0].id === user2.id && match[1].id === user1.id)
+                        );
+                        pool = pool.filter(user =>
+                            !(user.id !== user1.id && user.id !== user2.id)
+                        );
+                        matched.push([user1, user2]);
+                    }
+
+                    resolve();
+                }
+            }
+        }
+    });
+}
+
+function sendSuccessResponse<T>(res: http.ServerResponse, data: T): void {
+    const response: SuccessResponse<T> = { status: 'success', data: data };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(response));
+}
+
+function sendErrorResponse(res: http.ServerResponse, message: string): void {
+    const response: ErrorResponse = { status: 'error', message: message };
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(response));
+}
+
+function sendNotAllowedResponse(res: http.ServerResponse, message: string): void {
+    const response: NotAllowedResponse = { status: 'error', message: message };
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(response));
+}
+
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
     let pathname = new URL(req.url || '', `http://${req.headers.host}`).pathname;
-
-    if (pathname === '/addToPool') { //searching for match
-        let body: Buffer[] = [];
-        req.on('data', (chunk) => {
-            body.push(chunk);
-        });
-        req.on('end', () => {
-            let user: User = JSON.parse(Buffer.concat(body).toString());
-            user.id = crypto.randomUUID();
-            pool.push(user);
-            console.log(`Look at this little fool ya: ${user}`);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(user));
-        });
+    console.log(pool);
+    console.log(matched);
+    if (pathname === '/addToPool') {
+        if (req.method === 'POST') {
+            let body: Buffer[] = [];
+            req.on('data', (chunk) => {
+                body.push(chunk);
+            });
+            req.on('end', async () => {
+                try {
+                    const user = await addToPool(body);
+                    sendSuccessResponse(res, user);
+                } catch (err: any) {
+                    sendErrorResponse(res, err);
+                }
+            });
+        } else {
+            sendNotAllowedResponse(res, 'Method not allowed, DELETE required.');
+        }
     } else if (pathname.startsWith('/removeFromPool')) {
         if (req.method === 'DELETE') {
             const userId = pathname.split('/')[2];
 
             removeFromPool(userId)
                 .then(() => {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'success', message: 'User removed from pool' }));
+                    sendSuccessResponse(res, 'User removed from pool');
                 })
                 .catch((err) => {
-                    res.writeHead(500, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'error', message: 'An error occurred' }));
+                    sendErrorResponse(res, err);
                 });
         } else {
-            res.writeHead(405, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ status: 'error', message: 'Method not allowed' }));
+            sendNotAllowedResponse(res, 'Method not allowed, DELETE required.');
         }
     } else if (pathname === '/match') {
-
+        if (req.method === 'POST') {
+            let body: Buffer[] = [];
+            req.on('data', (chunk) => {
+                body.push(chunk);
+            });
+            req.on('end', async () => {
+                try {
+                    const userId: string = JSON.parse(Buffer.concat(body).toString()).userId;
+                    matchUsers(userId)
+                        .then(() => {
+                            sendSuccessResponse(res, 'Users matched successfully');
+                        })
+                        .catch((err) => {
+                            sendErrorResponse(res, err);
+                        });
+                } catch (err: any) {
+                    sendErrorResponse(res, err);
+                }
+            });
+        } else {
+            sendNotAllowedResponse(res, 'Method not allowed, POST required.');
+        }
     } else if (pathname === '/unmatch') {
 
     } else {
@@ -82,8 +175,7 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
 
         fs.readFile(filePath, (err: NodeJS.ErrnoException | null, data: Buffer) => {
             if (err) {
-                res.writeHead(500);
-                res.end(`Server Error: ${err.code}`);
+                sendErrorResponse(res, `Server Error: ${err.code}`);
             } else {
                 res.writeHead(200, { 'Content-Type': contentType });
                 res.end(data, 'utf-8');

@@ -1,45 +1,27 @@
-function updateConnectionStatus(): NodeJS.Timeout {
-    const connectBtn = document.querySelector('#usernameForm button') as HTMLButtonElement;
-    let isIncreasing = true;
-    const maxDots = 3;
-    const baseString = 'Connecting';
-    let connectionStatusString = baseString;
-    let dotCount = 0;
+import { User } from "../../models/interfaces.js";
+import { ErrorResponse, NotAllowedResponse, SuccessResponse } from '../../models/interfaces.js';
 
-    const intervalId = setInterval(() => {
-        if (isIncreasing) {
-            if (dotCount < maxDots) {
-                connectionStatusString += '.';
-                ++dotCount;
-            } else {
-                isIncreasing = false;
-            }
-        } else {
-            if (dotCount > 0) {
-                connectionStatusString = connectionStatusString.slice(0, -1);
-                --dotCount;
-            } else {
-                isIncreasing = true;
-            }
-        }
-        connectBtn.textContent = connectionStatusString;
-    }, 1000);
-    return intervalId;
-}
-
-function addToPool(username: string): Promise<Response> {
+function addToPool(username: string): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<User>> {
     return fetch('/addToPool', {
         method: 'POST',
         body: JSON.stringify({ username: username }),
         headers: { 'Content-Type': 'application/json' }
-    });
+    }).then(response => response.json());
 }
 
-function removeFromPool(userId: string): Promise<Response> {
+function match(userId: string): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<string>> {
+    return fetch('/match', {
+        method: 'POST',
+        body: JSON.stringify({ userId: userId }),
+        headers: { 'Content-Type': 'application/json' }
+    }).then(response => response.json());
+}
+
+function removeFromPool(userId: string): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<string>> {
     return fetch(`/removeFromPool/${userId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
-    });
+    }).then(response => response.json());
 }
 
 export default function connect(): void {
@@ -47,39 +29,54 @@ export default function connect(): void {
     const usernameInput = document.querySelector('#usernameForm input') as HTMLInputElement;
     const spinner = document.querySelector('.spinner') as HTMLDivElement;
 
-    let connectingIntervalId: NodeJS.Timeout | undefined;
-
     let connectionTries = 0;
     const maxConnections = 5;
 
     let matchingIntervalId: NodeJS.Timeout | undefined;
 
-    connectBtn.addEventListener('click', (evt) => {
+    let currentUser: User;
+
+    connectBtn.addEventListener('click', async (evt) => {
         evt.preventDefault();
         spinner.classList.toggle('visible');
 
         if (spinner.classList.contains('visible')) {
-            connectingIntervalId = updateConnectionStatus();
+            connectBtn.textContent = 'Disconnect';
             ++connectionTries;
-            addToPool(usernameInput.value).then(response => {
-                if (response.ok) {
-                    console.log(response.json());
+            try {
+                const response = await addToPool(usernameInput.value);
+                if (response.status === 'success') {
+                    currentUser = response.data;
+                    matchingIntervalId = setInterval(async () => {
+                        try {
+                            const matchResponse = await match(currentUser.id);
+                            console.log(`matchResponse: ${JSON.stringify(matchResponse)}`);
+                            if (matchResponse.status === 'success') {
+                                console.log(`interval: ${matchingIntervalId}`);
+                                console.log('propertly matched users');
+                                clearInterval(matchingIntervalId);
+                            } else {
+                                console.error(matchResponse.message);
+                            }
+                        } catch (err) {
+                            console.error(err);
+                        }
+                    }, 5000);
+                } else {
+                    throw new Error(response.message);
                 }
-            });
-
+            } catch (err) {
+                console.error(err);
+            }
         } else {
-            if (connectingIntervalId !== undefined) {
-                clearInterval(connectingIntervalId);
-                connectingIntervalId = undefined;
-                connectBtn.textContent = 'Connect';
-                if (connectionTries >= maxConnections) {
-                    connectBtn.disabled = true;
-                    alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
-                    setTimeout(() => {
-                        connectBtn.disabled = false;
-                        connectionTries = 0;
-                    }, 30000);
-                }
+            connectBtn.textContent = 'Connect';
+            if (connectionTries >= maxConnections) {
+                connectBtn.disabled = true;
+                alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
+                setTimeout(() => {
+                    connectBtn.disabled = false;
+                    connectionTries = 0;
+                }, 30000);
             }
         }
     })
