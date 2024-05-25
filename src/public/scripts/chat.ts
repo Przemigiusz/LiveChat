@@ -18,12 +18,21 @@ function sendMessage(user: User, message: ChatMessage): Promise<ErrorResponse | 
     }).then(response => response.json());
 }
 
+function checkConnectionStatus(user: User): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<string>> {
+    return fetch('/connectionStatus', {
+        method: 'POST',
+        body: JSON.stringify({ user: user }),
+        headers: { 'Content-Type': 'application/json' }
+    }).then(response => response.json());
+}
+
 export default function setupChat(): void {
     const messageForm = document.querySelector('#message-form') as HTMLFormElement;
     const messageInput = document.querySelector('#message-form input') as HTMLInputElement;
     const chatMessages = document.querySelector('.chat .messages') as HTMLDivElement;
+    const connectionStatus = document.querySelector('.chat .connection-status span') as HTMLSpanElement;
 
-    if (messageForm && messageInput && chatMessages) {
+    if (messageForm && messageInput && chatMessages && connectionStatus) {
         try {
             const item = sessionStorage.getItem('customUser');
             const user: User = item ? JSON.parse(item) : null;
@@ -31,7 +40,7 @@ export default function setupChat(): void {
                 throw new Error('User not found');
             }
 
-            messageForm.addEventListener('submit', async (evt) => {
+            const submitCallback = async (evt: Event) => {
                 evt.preventDefault();
                 const messageContent = messageInput.value;
                 messageInput.value = '';
@@ -40,17 +49,18 @@ export default function setupChat(): void {
                 const response = await sendMessage(user, message);
 
                 if (response.status !== 'success') {
-                    console.error(response.message);
+                    console.error(response.message); //Conversation was not found OR Message id could not be generated correctly
                 };
-            });
+            }
 
-            setInterval(async () => {
+            messageForm.addEventListener('submit', submitCallback);
+
+            const getMessagesIntervalId = setInterval(async () => {
                 try {
                     const response = await getMessages(user);
                     if (response.status === 'success') {
                         chatMessages.innerHTML = '';
 
-                        console.log(response.data);
                         const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
 
                         sortedMessages.forEach((message: ChatMessage) => {
@@ -75,12 +85,28 @@ export default function setupChat(): void {
                             chatMessages.appendChild(messageDiv);
                         });
                     } else {
-                        throw new Error(response.message);
+                        throw new Error(response.message); //Messages could not be retrieved
                     }
-                } catch (err) {
+                } catch (err) { //Probably problems with the network OR Messages could not be retrieved
+                    clearInterval(getMessagesIntervalId);
                     console.error(err);
                 }
             }, 5000)
+
+            const getConnectionStatusIntervalId = setInterval(async () => {
+                try {
+                    const response = await checkConnectionStatus(user);
+                    if (response.status !== 'success') {
+                        throw new Error(response.message); //One of the users is not connected
+                    }
+                } catch (err) { //Probably problems with the network OR One of the users is not connected
+                    clearInterval(getConnectionStatusIntervalId);
+                    clearInterval(getMessagesIntervalId);
+                    messageForm.removeEventListener('submit', submitCallback);
+                    connectionStatus.style.backgroundColor = '#dc2f02';
+                    console.error(err);
+                }
+            }, 10000);
         } catch (err) {
             console.error(err);
         }

@@ -35,7 +35,7 @@ export default function connect(onMatchFound: () => void): void {
 
     let matchingIntervalId: NodeJS.Timeout | undefined;
 
-    let currentUser: User;
+    let user: User;
 
     usernameForm.addEventListener('submit', async (evt) => {
         evt.preventDefault();
@@ -47,11 +47,11 @@ export default function connect(onMatchFound: () => void): void {
             try {
                 const response = await addToPool(usernameInput.value);
                 if (response.status === 'success') {
-                    currentUser = response.data;
-                    sessionStorage.setItem('customUser', JSON.stringify(currentUser));
+                    user = response.data;
+                    sessionStorage.setItem('customUser', JSON.stringify(user));
                     matchingIntervalId = setInterval(async () => {
                         try {
-                            const matchResponse = await match(currentUser.id);
+                            const matchResponse = await match(user.id);
                             if (matchResponse.status === 'success') {
                                 clearInterval(matchingIntervalId);
                                 onMatchFound();
@@ -69,14 +69,25 @@ export default function connect(onMatchFound: () => void): void {
                 console.error(err);
             }
         } else {
-            connectBtn.textContent = 'Connect';
-            if (connectionTries >= maxConnections) {
-                connectBtn.disabled = true;
-                alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
-                setTimeout(() => {
-                    connectBtn.disabled = false;
-                    connectionTries = 0;
-                }, 30000);
+            try {
+                connectBtn.textContent = 'Connect';
+                const response = await removeFromPool(user.id);
+                if (response.status === 'success') {
+                    clearInterval(matchingIntervalId);
+                    if (connectionTries >= maxConnections) {
+                        connectBtn.disabled = true;
+                        alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
+                        setTimeout(() => {
+                            connectBtn.disabled = false;
+                            connectionTries = 0;
+                        }, 30000);
+                    }
+                } else {
+                    throw new Error(response.message);
+                }
+            } catch (err) {
+                clearInterval(matchingIntervalId);
+                console.error(err);
             }
         }
     })

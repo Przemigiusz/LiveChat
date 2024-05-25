@@ -9,12 +9,17 @@ let pool: User[] = [];
 let potentialMatches: [User, User][] = [];
 let matched: [User, User, ChatMessage[]][] = [];
 
+function checkConnectionStatus(user: User): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const match = matched.find(match => match[0].id === user.id || match[1].id === user.id);
+        match ? resolve('Connected') : reject('Not connected');
+    });
+}
+
 function sendMessage(user: User, message: ChatMessage): Promise<void> {
     return new Promise((resolve, reject) => {
         try {
-            const match = matched.find(match => {
-                return match[0].id === user.id || match[1].id === user.id;
-            });
+            const match = matched.find(match => match[0].id === user.id || match[1].id === user.id);
             if (match) {
                 message.id = crypto.randomUUID();
                 match[2].push(message);
@@ -30,9 +35,7 @@ function sendMessage(user: User, message: ChatMessage): Promise<void> {
 
 export function getMessages(user: User): Promise<ChatMessage[]> {
     return new Promise((resolve, reject) => {
-        const match = matched.find(match => {
-            return match[0].id === user.id || match[1].id === user.id;
-        });
+        const match = matched.find(match => match[0].id === user.id || match[1].id === user.id);
         if (match) {
             const messages: ChatMessage[] = match[2];
             resolve(messages);
@@ -229,6 +232,27 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
         } else {
             sendNotAllowedResponse(res, 'Method not allowed, POST required.');
         }
+    } else if (pathname === '/connectionStatus') {
+        if (req.method === 'POST') {
+            let body: Buffer[] = [];
+            req.on('data', (chunk) => {
+                body.push(chunk);
+            });
+            req.on('end', async () => {
+                const parsedBody = JSON.parse(Buffer.concat(body).toString());
+                const user: User = parsedBody.user;
+                checkConnectionStatus(user)
+                    .then(status => {
+                        sendSuccessResponse(res, status);
+                    })
+                    .catch((err) => {
+                        sendErrorResponse(res, err);
+                    });
+            })
+        } else {
+            sendNotAllowedResponse(res, 'Method not allowed, POST required.');
+        }
+
     } else {
         let filePath: string;
         let contentType: string;
