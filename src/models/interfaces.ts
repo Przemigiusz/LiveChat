@@ -3,6 +3,13 @@ export interface User {
     username: string;
 }
 
+export interface ChatMessage {
+    id: string;
+    sender: User;
+    content: string;
+    timestamp: number;
+}
+
 export interface ErrorResponse {
     status: 'error';
     message: string;

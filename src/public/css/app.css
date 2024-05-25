@@ -1,6 +1,11 @@
 :root {
     --a-color: #232323;
     --b-color: #FFFFFF;
+    --c-color: #70e000;
+    --d-color: #dc2f02;
+
+    --sender-color: #7f7f7f;
+    --receiver-color: #464646;
 
     --primary-font: "Roboto Condensed", sans-serif;
     --secondary-font: "Roboto", sans-serif;
@@ -29,7 +34,7 @@ html {
 body {
     font-family: var(--primary-font);
     background-color: var(--a-color);
-    color: var(--c-color);
+    color: var(--b-color);
 }
 
 main {

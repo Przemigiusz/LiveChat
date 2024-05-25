@@ -2,12 +2,45 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { User } from './models/interfaces.js';
+import { User, ChatMessage } from './models/interfaces.js';
 import { ErrorResponse, NotAllowedResponse, SuccessResponse } from './models/interfaces.js';
 
 let pool: User[] = [];
 let potentialMatches: [User, User][] = [];
-let matched: [User, User][] = [];
+let matched: [User, User, ChatMessage[]][] = [];
+
+function sendMessage(user: User, message: ChatMessage): Promise<void> {
+    return new Promise((resolve, reject) => {
+        try {
+            const match = matched.find(match => {
+                return match[0].id === user.id || match[1].id === user.id;
+            });
+            if (match) {
+                message.id = crypto.randomUUID();
+                match[2].push(message);
+                resolve();
+            } else {
+                reject('Conversation not found');
+            }
+        } catch (err) {
+            reject(err);
+        }
+    })
+}
+
+export function getMessages(user: User): Promise<ChatMessage[]> {
+    return new Promise((resolve, reject) => {
+        const match = matched.find(match => {
+            return match[0].id === user.id || match[1].id === user.id;
+        });
+        if (match) {
+            const messages: ChatMessage[] = match[2];
+            resolve(messages);
+        } else {
+            reject('No conversation found');
+        }
+    });
+}
 
 function addToPool(body: Buffer[]): Promise<User> {
     return new Promise((resolve, reject) => {
@@ -61,7 +94,7 @@ function matchUsers(userId: string): Promise<void> {
                         pool = pool.filter(user =>
                             !(user.id !== user1.id && user.id !== user2.id)
                         );
-                        matched.push([user1, user2]);
+                        matched.push([user1, user2, []]);
                     }
 
                     resolve();
@@ -91,8 +124,6 @@ function sendNotAllowedResponse(res: http.ServerResponse, message: string): void
 
 const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
     let pathname = new URL(req.url || '', `http://${req.headers.host}`).pathname;
-    console.log(pool);
-    console.log(matched);
     if (pathname === '/addToPool') {
         if (req.method === 'POST') {
             let body: Buffer[] = [];
@@ -149,6 +180,55 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
         }
     } else if (pathname === '/unmatch') {
 
+    } else if (pathname === '/getMessages') {
+        if (req.method === 'POST') {
+            let body: Buffer[] = [];
+            req.on('data', (chunk) => {
+                body.push(chunk);
+            });
+            req.on('end', async () => {
+                try {
+                    const parsedBody = JSON.parse(Buffer.concat(body).toString());
+                    const user: User = parsedBody.user;
+                    getMessages(user)
+                        .then(messages => {
+                            sendSuccessResponse(res, messages);
+                        })
+                        .catch((err) => {
+                            sendErrorResponse(res, err);
+                        });
+                } catch (err: any) {
+                    sendErrorResponse(res, err);
+                }
+            });
+        } else {
+            sendNotAllowedResponse(res, 'Method not allowed, POST required.');
+        }
+    } else if (pathname === '/sendMessage') {
+        if (req.method === 'POST') {
+            let body: Buffer[] = [];
+            req.on('data', (chunk) => {
+                body.push(chunk);
+            });
+            req.on('end', async () => {
+                try {
+                    const parsedBody = JSON.parse(Buffer.concat(body).toString());
+                    const user: User = parsedBody.user;
+                    const message: ChatMessage = parsedBody.message;
+                    sendMessage(user, message)
+                        .then(() => {
+                            sendSuccessResponse(res, 'Message sent successfully');
+                        })
+                        .catch((err) => {
+                            sendErrorResponse(res, err);
+                        });
+                } catch (err: any) {
+                    sendErrorResponse(res, err);
+                }
+            });
+        } else {
+            sendNotAllowedResponse(res, 'Method not allowed, POST required.');
+        }
     } else {
         let filePath: string;
         let contentType: string;

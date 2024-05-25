@@ -24,9 +24,10 @@ function removeFromPool(userId: string): Promise<ErrorResponse | NotAllowedRespo
     }).then(response => response.json());
 }
 
-export default function connect(): void {
-    const connectBtn = document.querySelector('#usernameForm button') as HTMLButtonElement;
-    const usernameInput = document.querySelector('#usernameForm input') as HTMLInputElement;
+export default function connect(onMatchFound: () => void): void {
+    const usernameForm = document.querySelector('#username-form') as HTMLFormElement;
+    const connectBtn = document.querySelector('#username-form button') as HTMLButtonElement;
+    const usernameInput = document.querySelector('#username-form input') as HTMLInputElement;
     const spinner = document.querySelector('.spinner') as HTMLDivElement;
 
     let connectionTries = 0;
@@ -36,7 +37,7 @@ export default function connect(): void {
 
     let currentUser: User;
 
-    connectBtn.addEventListener('click', async (evt) => {
+    usernameForm.addEventListener('submit', async (evt) => {
         evt.preventDefault();
         spinner.classList.toggle('visible');
 
@@ -47,14 +48,13 @@ export default function connect(): void {
                 const response = await addToPool(usernameInput.value);
                 if (response.status === 'success') {
                     currentUser = response.data;
+                    sessionStorage.setItem('customUser', JSON.stringify(currentUser));
                     matchingIntervalId = setInterval(async () => {
                         try {
                             const matchResponse = await match(currentUser.id);
-                            console.log(`matchResponse: ${JSON.stringify(matchResponse)}`);
                             if (matchResponse.status === 'success') {
-                                console.log(`interval: ${matchingIntervalId}`);
-                                console.log('propertly matched users');
                                 clearInterval(matchingIntervalId);
+                                onMatchFound();
                             } else {
                                 console.error(matchResponse.message);
                             }

@@ -1,7 +1,8 @@
 import connect from "./start.js";
+import setupChat from "./chat.js";
 
 interface Page {
-    name: string;
+    path: string;
     href: string;
     content: string;
 }
@@ -17,7 +18,7 @@ const navigationModule: NavigationModule = {
     pages: [],
     loadPage: function (href, pushToHistory) {
         const mainSection = document.querySelector('main');
-        const wantedPage = this.pages.find((page: Page) => page.name === href);
+        const wantedPage = this.pages.find((page: Page) => page.href === href);
         if (wantedPage && mainSection) {
             mainSection.innerHTML = wantedPage.content;
             if (pushToHistory)
@@ -30,14 +31,18 @@ const navigationModule: NavigationModule = {
         }
 
         if (href === '/') {
-            connect();
+            connect(() => {
+                this.loadPage('/chat', false);
+            });
+        } else if (href === '/chat') {
+            setupChat();
         }
 
     },
-    fetchPage: function (href, pageName) {
-        return fetch(href)
+    fetchPage: function (path, href) {
+        return fetch(path)
             .then(response => response.text())
-            .then(content => this.pages.push({ name: pageName, href: href, content: content }));
+            .then(content => this.pages.push({ path: path, href: href, content: content }));
     },
     init: function () {
         return Promise.all([
@@ -50,4 +55,6 @@ const navigationModule: NavigationModule = {
     }
 };
 
-navigationModule.init();
+document.addEventListener('DOMContentLoaded', () => {
+    navigationModule.init();
+});
