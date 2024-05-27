@@ -1,9 +1,9 @@
 import { User, ChatMessage, ErrorResponse, SuccessResponse } from "../../models/interfaces.js";
 
-function getMessages(user: User): Promise<ErrorResponse | SuccessResponse<ChatMessage[]>> {
+function getMessages(user: User, latestMessageTimestamp: number): Promise<ErrorResponse | SuccessResponse<ChatMessage[]>> {
     return fetch('/messages', {
         method: 'POST',
-        body: JSON.stringify({ user: user, method: 'GET' }),
+        body: JSON.stringify({ user: user, method: 'GET', latestMessageTimestamp: latestMessageTimestamp }),
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
@@ -53,13 +53,19 @@ export default function setupChat(): void {
 
             messageForm.addEventListener('submit', submitCallback);
 
+            let latestMessageTimestamp: number = 0;
+
             const getMessagesIntervalId = setInterval(async () => {
                 try {
-                    const response = await getMessages(user);
+                    const response = await getMessages(user, latestMessageTimestamp);
                     if (response.status === 'success') {
-                        chatMessages.innerHTML = '';
+                        //chatMessages.innerHTML = '';
                         if (response.data) {
                             const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
+                            console.log(response.data);
+                            if (sortedMessages.length > 0) {
+                                latestMessageTimestamp = sortedMessages[sortedMessages.length - 1].timestamp;
+                            }
 
                             sortedMessages.forEach((message: ChatMessage) => {
                                 const messageDiv = document.createElement('div');
@@ -90,7 +96,7 @@ export default function setupChat(): void {
                     clearInterval(getMessagesIntervalId);
                     console.error(err);
                 }
-            }, 5000);
+            }, 2500);
 
         } catch (err) {
             console.error(err);

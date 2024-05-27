@@ -99,13 +99,13 @@ function sendMessage(user: User, message: ChatMessage): Promise<void> {
     })
 }
 
-export function getMessages(user: User): Promise<ChatMessage[]> {
+export function getMessages(user: User, latestMessageTimestamp: number): Promise<ChatMessage[]> {
     return new Promise((resolve, reject) => {
         const match = matched.find(match => {
             return match[0].id === user.id || match[1].id === user.id;
         });
         if (match) {
-            const messages: ChatMessage[] = match[2];
+            const messages: ChatMessage[] = match[2].filter(message => message.timestamp > latestMessageTimestamp);
             resolve(messages);
         } else {
             reject(ErrorCode.ConversationNotFound);
@@ -199,7 +199,8 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                     const parsedBody = JSON.parse(Buffer.concat(body).toString());
                     const user: User = parsedBody.user;
                     if (parsedBody.method === 'GET') {
-                        getMessages(user)
+                        const latestMessageTimestamp: number = parsedBody.latestMessageTimestamp;
+                        getMessages(user, latestMessageTimestamp)
                             .then(messages => {
                                 sendSuccessResponse(res, messages);
                             })
