@@ -1,24 +1,22 @@
-import { User } from "../../models/interfaces.js";
-import { ChatMessage } from "../../models/interfaces.js";
-import { ErrorResponse, NotAllowedResponse, SuccessResponse } from "../../models/interfaces.js";
+import { User, ChatMessage, ErrorResponse, SuccessResponse } from "../../models/interfaces.js";
 
-function getMessages(user: User): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<ChatMessage[]>> {
-    return fetch('/getMessages', {
+function getMessages(user: User): Promise<ErrorResponse | SuccessResponse<ChatMessage[]>> {
+    return fetch('/messages', {
         method: 'POST',
-        body: JSON.stringify({ user: user }),
+        body: JSON.stringify({ user: user, method: 'GET' }),
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function sendMessage(user: User, message: ChatMessage): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<void>> {
-    return fetch('/sendMessage', {
+function sendMessage(user: User, message: ChatMessage): Promise<ErrorResponse | SuccessResponse<void>> {
+    return fetch('/messages', {
         method: 'POST',
-        body: JSON.stringify({ user: user, message: message }),
+        body: JSON.stringify({ user: user, message: message, method: 'POST' }),
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function checkConnectionStatus(user: User): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<string>> {
+function checkConnectionStatus(user: User): Promise<ErrorResponse | SuccessResponse<string>> {
     return fetch('/connectionStatus', {
         method: 'POST',
         body: JSON.stringify({ user: user }),
@@ -49,7 +47,7 @@ export default function setupChat(): void {
                 const response = await sendMessage(user, message);
 
                 if (response.status !== 'success') {
-                    console.error(response.message); //Conversation was not found OR Message id could not be generated correctly
+                    console.error(response.message);
                 };
             }
 
@@ -60,53 +58,40 @@ export default function setupChat(): void {
                     const response = await getMessages(user);
                     if (response.status === 'success') {
                         chatMessages.innerHTML = '';
+                        if (response.data) {
+                            const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
 
-                        const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
+                            sortedMessages.forEach((message: ChatMessage) => {
+                                const messageDiv = document.createElement('div');
+                                messageDiv.classList.add('message');
+                                messageDiv.classList.add(message.sender.id === user.id ? 'sender-message' : 'receiver-message');
 
-                        sortedMessages.forEach((message: ChatMessage) => {
-                            const messageDiv = document.createElement('div');
-                            messageDiv.classList.add('message');
-                            messageDiv.classList.add(message.sender.id === user.id ? 'sender-message' : 'receiver-message');
+                                const usernameP = document.createElement('p');
+                                usernameP.classList.add('username');
+                                usernameP.textContent = message.sender.username;
 
-                            const usernameP = document.createElement('p');
-                            usernameP.classList.add('username');
-                            usernameP.textContent = message.sender.username;
+                                const contentDiv = document.createElement('div');
+                                contentDiv.classList.add('message-content');
 
-                            const contentDiv = document.createElement('div');
-                            contentDiv.classList.add('message-content');
+                                const contentP = document.createElement('p');
+                                contentP.textContent = message.content;
 
-                            const contentP = document.createElement('p');
-                            contentP.textContent = message.content;
+                                contentDiv.appendChild(contentP);
+                                messageDiv.appendChild(usernameP);
+                                messageDiv.appendChild(contentDiv);
 
-                            contentDiv.appendChild(contentP);
-                            messageDiv.appendChild(usernameP);
-                            messageDiv.appendChild(contentDiv);
-
-                            chatMessages.appendChild(messageDiv);
-                        });
+                                chatMessages.appendChild(messageDiv);
+                            });
+                        }
                     } else {
-                        throw new Error(response.message); //Messages could not be retrieved
+                        console.error(response.message);
                     }
-                } catch (err) { //Probably problems with the network OR Messages could not be retrieved
+                } catch (err) {
                     clearInterval(getMessagesIntervalId);
                     console.error(err);
                 }
-            }, 5000)
+            }, 5000);
 
-            const getConnectionStatusIntervalId = setInterval(async () => {
-                try {
-                    const response = await checkConnectionStatus(user);
-                    if (response.status !== 'success') {
-                        throw new Error(response.message); //One of the users is not connected
-                    }
-                } catch (err) { //Probably problems with the network OR One of the users is not connected
-                    clearInterval(getConnectionStatusIntervalId);
-                    clearInterval(getMessagesIntervalId);
-                    messageForm.removeEventListener('submit', submitCallback);
-                    connectionStatus.style.backgroundColor = '#dc2f02';
-                    console.error(err);
-                }
-            }, 10000);
         } catch (err) {
             console.error(err);
         }

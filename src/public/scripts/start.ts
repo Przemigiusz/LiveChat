@@ -1,25 +1,24 @@
-import { User } from "../../models/interfaces.js";
-import { ErrorResponse, NotAllowedResponse, SuccessResponse } from '../../models/interfaces.js';
+import { User, ErrorResponse, SuccessResponse, InfoResponse, ErrorCode, InfoCode } from '../../models/interfaces.js';
 
-function addToPool(username: string): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<User>> {
-    return fetch('/addToPool', {
+function addToPool(username: string): Promise<ErrorResponse | SuccessResponse<User>> {
+    return fetch('/pool', {
         method: 'POST',
         body: JSON.stringify({ username: username }),
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function match(userId: string): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<string>> {
-    return fetch('/match', {
-        method: 'POST',
-        body: JSON.stringify({ userId: userId }),
+function removeFromPool(userId: string): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
+    return fetch(`/pool/${userId}`, {
+        method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function removeFromPool(userId: string): Promise<ErrorResponse | NotAllowedResponse | SuccessResponse<string>> {
-    return fetch(`/removeFromPool/${userId}`, {
-        method: 'DELETE',
+function match(userId: string): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
+    return fetch('/match', {
+        method: 'POST',
+        body: JSON.stringify({ userId: userId }),
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
@@ -33,9 +32,30 @@ export default function connect(onMatchFound: () => void): void {
     let connectionTries = 0;
     const maxConnections = 5;
 
-    let matchingIntervalId: NodeJS.Timeout | undefined;
-
     let user: User;
+
+    const stopMatching = async () => {
+        try {
+            const response = await removeFromPool(user.id);
+            if (response.status === 'success') {
+                spinner.classList.toggle('visible');
+                connectBtn.textContent = 'Connect';
+                if (connectionTries >= maxConnections) {
+                    connectBtn.disabled = true;
+                    alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
+                    setTimeout(() => {
+                        connectBtn.disabled = false;
+                        connectionTries = 0;
+                    }, 30000);
+                }
+            } else {
+                if (response.status === 'error') throw new Error(response.message);
+                else console.info(response.message);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
 
     usernameForm.addEventListener('submit', async (evt) => {
         evt.preventDefault();
@@ -47,46 +67,26 @@ export default function connect(onMatchFound: () => void): void {
             try {
                 const response = await addToPool(usernameInput.value);
                 if (response.status === 'success') {
-                    user = response.data;
-                    sessionStorage.setItem('customUser', JSON.stringify(user));
-                    matchingIntervalId = setInterval(async () => {
-                        try {
-                            const matchResponse = await match(user.id);
-                            if (matchResponse.status === 'success') {
-                                clearInterval(matchingIntervalId);
-                                onMatchFound();
-                            } else {
-                                console.error(matchResponse.message);
-                            }
-                        } catch (err) {
-                            console.error(err);
+                    if (response.data) {
+                        user = response.data;
+                        sessionStorage.setItem('customUser', JSON.stringify(user));
+                        const matchResponse = await match(user.id);
+                        if (matchResponse.status === 'success') {
+                            onMatchFound();
+                        } else {
+                            if (matchResponse.status === 'error') throw new Error(matchResponse.message);
+                            else console.info(matchResponse.message);
+                            stopMatching();
                         }
-                    }, 5000);
-                } else {
-                    throw new Error(response.message);
+                    }
                 }
             } catch (err) {
                 console.error(err);
             }
         } else {
             try {
-                connectBtn.textContent = 'Connect';
-                const response = await removeFromPool(user.id);
-                if (response.status === 'success') {
-                    clearInterval(matchingIntervalId);
-                    if (connectionTries >= maxConnections) {
-                        connectBtn.disabled = true;
-                        alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
-                        setTimeout(() => {
-                            connectBtn.disabled = false;
-                            connectionTries = 0;
-                        }, 30000);
-                    }
-                } else {
-                    throw new Error(response.message);
-                }
+                stopMatching();
             } catch (err) {
-                clearInterval(matchingIntervalId);
                 console.error(err);
             }
         }
