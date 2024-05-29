@@ -31,11 +31,9 @@ const navigationModule: NavigationModule = {
         }
 
         if (href === '/') {
-            connect(() => {
-                this.loadPage('/chat', false);
-            });
+            connect(() => this.loadPage('/chat', false));
         } else if (href === '/chat') {
-            setupChat();
+            setupChat(() => this.loadPage('/', false), () => this.loadPage('/chat', false));
         }
 
     },

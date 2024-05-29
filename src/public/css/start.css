@@ -50,19 +50,6 @@
 
 .start-section button {
     width: 100%;
-    border: 3px solid var(--b-color);
-    border-radius: 0.5rem;
-    font-size: 1rem;
-    padding: 0.5rem;
-    background-color: var(--a-color);
-    color: var(--b-color);
-    cursor: pointer;
-    transition: all .5s ease;
-}
-
-.start-section button:hover {
-    background-color: var(--b-color);
-    color: var(--a-color);
 }
 
 .spinner {

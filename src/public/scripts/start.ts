@@ -74,9 +74,9 @@ export default function connect(onMatchFound: () => void): void {
                         if (matchResponse.status === 'success') {
                             onMatchFound();
                         } else {
+                            stopMatching();
                             if (matchResponse.status === 'error') throw new Error(matchResponse.message);
                             else console.info(matchResponse.message);
-                            stopMatching();
                         }
                     }
                 }

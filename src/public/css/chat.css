@@ -99,3 +99,13 @@
     height: 1.5rem;
     fill: var(--b-color);
 }
+
+.chat-navigation {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+}
+
+.chat-navigation button {
+    width: 100px;
+}

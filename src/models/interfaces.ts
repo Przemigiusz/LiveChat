@@ -1,4 +1,5 @@
 export enum ErrorCode {
+    MatchNotFound = 'MATCH_NOT_FOUND',
     UserNotFound = 'USER_NOT_FOUND',
     ConversationNotFound = 'CONVERSATION_NOT_FOUND',
     AddUserError = 'ADD_USER_ERROR',
@@ -11,9 +12,11 @@ export enum ErrorCode {
 export enum InfoCode {
     Timeout = 'TIMEOUT',
     DisconnectNotAllowed = 'DISCONNECT_NOT_ALLOWED',
+    DisconnectOccured = 'DISCONNECT_OCCURED',
 }
 
 export const ErrorMessage: { [key in ErrorCode]: string } = {
+    [ErrorCode.MatchNotFound]: 'Match not found.',
     [ErrorCode.UserNotFound]: 'User not found.',
     [ErrorCode.ConversationNotFound]: 'Conversation not found.',
     [ErrorCode.AddUserError]: 'Error adding user.',
@@ -26,6 +29,7 @@ export const ErrorMessage: { [key in ErrorCode]: string } = {
 export const InfoMessage: { [key in InfoCode]: string } = {
     [InfoCode.Timeout]: 'Request timed out.',
     [InfoCode.DisconnectNotAllowed]: 'Match canceled.',
+    [InfoCode.DisconnectOccured]: 'Match disconnected.',
 }
 
 export interface ErrorResponse {

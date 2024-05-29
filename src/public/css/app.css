@@ -45,3 +45,19 @@ main {
     width: 100vw;
     height: 100vh;
 }
+
+.custom-btn {
+    border: 3px solid var(--b-color);
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    padding: 0.5rem;
+    background-color: var(--a-color);
+    color: var(--b-color);
+    cursor: pointer;
+    transition: all .5s ease;
+}
+
+.custom-btn:hover {
+    background-color: var(--b-color);
+    color: var(--a-color);
+}

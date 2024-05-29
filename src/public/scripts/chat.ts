@@ -1,4 +1,4 @@
-import { User, ChatMessage, ErrorResponse, SuccessResponse } from "../../models/interfaces.js";
+import { User, ChatMessage, ErrorResponse, SuccessResponse, InfoResponse, InfoCode } from "../../models/interfaces.js";
 
 function getMessages(user: User, latestMessageTimestamp: number): Promise<ErrorResponse | SuccessResponse<ChatMessage[]>> {
     return fetch('/messages', {
@@ -16,7 +16,15 @@ function sendMessage(user: User, message: ChatMessage): Promise<ErrorResponse | 
     }).then(response => response.json());
 }
 
-function checkConnectionStatus(user: User): Promise<ErrorResponse | SuccessResponse<string>> {
+function disconnect(user: User): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
+    return fetch('/disconnect', {
+        method: 'POST',
+        body: JSON.stringify({ user: user }),
+        headers: { 'Content-Type': 'application/json' }
+    }).then(response => response.json());
+}
+
+function checkConnectionStatus(user: User): Promise<InfoResponse> {
     return fetch('/connectionStatus', {
         method: 'POST',
         body: JSON.stringify({ user: user }),
@@ -24,13 +32,15 @@ function checkConnectionStatus(user: User): Promise<ErrorResponse | SuccessRespo
     }).then(response => response.json());
 }
 
-export default function setupChat(): void {
+export default async function setupChat(onDisconnect: () => void, onSkip: () => void): Promise<void> {
     const messageForm = document.querySelector('#message-form') as HTMLFormElement;
     const messageInput = document.querySelector('#message-form input') as HTMLInputElement;
     const chatMessages = document.querySelector('.chat .messages') as HTMLDivElement;
     const connectionStatus = document.querySelector('.chat .connection-status span') as HTMLSpanElement;
+    const skipButton = document.querySelector('.chat-navigation .skip') as HTMLButtonElement;
+    const disconnectButton = document.querySelector('.chat-navigation .disconnect') as HTMLButtonElement;
 
-    if (messageForm && messageInput && chatMessages && connectionStatus) {
+    if (messageForm && messageInput && chatMessages && connectionStatus && skipButton && disconnectButton) {
         try {
             const item = sessionStorage.getItem('customUser');
             const user: User = item ? JSON.parse(item) : null;
@@ -59,10 +69,8 @@ export default function setupChat(): void {
                 try {
                     const response = await getMessages(user, latestMessageTimestamp);
                     if (response.status === 'success') {
-                        //chatMessages.innerHTML = '';
                         if (response.data) {
                             const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
-                            console.log(response.data);
                             if (sortedMessages.length > 0) {
                                 latestMessageTimestamp = sortedMessages[sortedMessages.length - 1].timestamp;
                             }
@@ -98,12 +106,29 @@ export default function setupChat(): void {
                 }
             }, 2500);
 
+            disconnectButton.addEventListener('click', async () => {
+                const response = await disconnect(user);
+                clearInterval(getMessagesIntervalId);
+                if (response.status === 'success') {
+                    onDisconnect();
+                } else {
+                    if (response.status === 'error') throw new Error(response.message);
+                    else console.info(response.message);
+                }
+            });
+
+            const connectionStatusResponse = await checkConnectionStatus(user);
+            if (connectionStatusResponse.status === 'info' && connectionStatusResponse.code === InfoCode.DisconnectOccured) {
+                clearInterval(getMessagesIntervalId);
+                connectionStatus.style.backgroundColor = '#dc2f02';
+            }
+
         } catch (err) {
             console.error(err);
         }
 
     } else {
-        console.error('Form, input or chat messages not found');
+        console.error('Page content was not generated correctly.');
     }
 
 };

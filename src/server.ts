@@ -52,25 +52,21 @@ function matchUsers(userId: string): Promise<void> {
                     clearInterval(matchInterval);
                     reject(ErrorCode.UserNotFound);
                 } else {
-                    const user2 = pool.find(user => user.id !== userId);
-                    if (user2) {
-                        const existingMatch = potentialMatches.find(match =>
-                            (match[0].id === user1.id && match[1].id === user2.id) ||
-                            (match[0].id === user2.id && match[1].id === user1.id)
-                        );
-                        if (!existingMatch) {
-                            potentialMatches.push([user1, user2]);
-                        } else {
-                            potentialMatches = potentialMatches.filter(match =>
-                                !(match[0].id === user1.id && match[1].id === user2.id) &&
-                                !(match[0].id === user2.id && match[1].id === user1.id)
-                            );
-                            pool = pool.filter(user =>
-                                !(user.id !== user1.id && user.id !== user2.id)
-                            );
-                            matched.push([user1, user2, []]);
-                            clearInterval(matchInterval);
-                            resolve();
+                    const ourMatch = potentialMatches.find(match => match[0].id === user1.id || match[1].id === user1.id); // czy zostalismy potencjalnie zmatchowani
+                    if (ourMatch) {
+                        const ourDefiniteMatch = matched.find(match => match[0].id === user1.id || match[1].id === user1.id); // czy zostalismy definitywnie zmatchowani
+                        if (!ourDefiniteMatch) matched.push([ourMatch[0], ourMatch[1], []]);
+                        else potentialMatches = potentialMatches.filter(match => match[0].id !== user1.id && match[1].id !== user1.id);
+                        pool = pool.filter(user => user.id !== user1.id);
+                        clearInterval(matchInterval);
+                        resolve();
+                    } else {
+                        const user2 = pool.find(user => user.id !== userId);
+                        if (user2) {
+                            const isUser2Matched = potentialMatches.find(match => match[0].id === user2.id || match[1].id === user2.id);
+                            if (!isUser2Matched) {
+                                potentialMatches.push([user1, user2]);
+                            }
                         }
                     }
                 }
@@ -78,6 +74,18 @@ function matchUsers(userId: string): Promise<void> {
             }
         }, interval);
     });
+}
+
+function removeMatch(userId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const matchIndex = matched.findIndex(match => match[0].id === userId || match[1].id === userId);
+        if (matchIndex !== -1) {
+            matched.splice(matchIndex, 1);
+            resolve();
+        } else {
+            reject(ErrorCode.MatchNotFound);
+        }
+    })
 }
 
 function sendMessage(user: User, message: ChatMessage): Promise<void> {
@@ -99,7 +107,7 @@ function sendMessage(user: User, message: ChatMessage): Promise<void> {
     })
 }
 
-export function getMessages(user: User, latestMessageTimestamp: number): Promise<ChatMessage[]> {
+function getMessages(user: User, latestMessageTimestamp: number): Promise<ChatMessage[]> {
     return new Promise((resolve, reject) => {
         const match = matched.find(match => {
             return match[0].id === user.id || match[1].id === user.id;
@@ -110,6 +118,18 @@ export function getMessages(user: User, latestMessageTimestamp: number): Promise
         } else {
             reject(ErrorCode.ConversationNotFound);
         }
+    });
+}
+
+function checkConnectionStatus(userId: string): Promise<InfoCode> {
+    return new Promise((resolve, reject) => {
+        const connectionInterval = setInterval(() => {
+            const matchIndex = matched.findIndex(match => match[0].id === userId || match[1].id === userId);
+            if (matchIndex === -1) {
+                clearInterval(connectionInterval);
+                resolve(InfoCode.DisconnectOccured);
+            }
+        }, 5000);
     });
 }
 
@@ -154,9 +174,9 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                     .then(() => {
                         sendSuccessResponse(res);
                     })
-                    .catch(err => {
-                        if (err === InfoCode.DisconnectNotAllowed) sendInfoResponse(res, err);
-                        else sendErrorResponse(res, err);
+                    .catch(code => {
+                        if (code === InfoCode.DisconnectNotAllowed) sendInfoResponse(res, code);
+                        else sendErrorResponse(res, code);
                     });
             } else {
                 sendErrorResponse(res, ErrorCode.NoUserId);
@@ -177,9 +197,9 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                         .then(() => {
                             sendSuccessResponse(res);
                         })
-                        .catch(err => {
-                            if (err === InfoCode.Timeout) sendInfoResponse(res, err);
-                            else sendErrorResponse(res, err);
+                        .catch(code => {
+                            if (code === InfoCode.Timeout) sendInfoResponse(res, code);
+                            else sendErrorResponse(res, code);
                         });
                 } catch (err: any) {
                     sendErrorResponse(res, err);
@@ -217,6 +237,51 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                                 sendErrorResponse(res, err);
                             });
                     }
+                } catch (err: any) {
+                    sendErrorResponse(res, err);
+                }
+            });
+        } else {
+            sendErrorResponse(res, ErrorCode.MethodNotAllowed);
+        }
+    } else if (pathname === '/disconnect') {
+        if (req.method === 'POST') {
+            let body: Buffer[] = [];
+            req.on('data', (chunk) => {
+                body.push(chunk);
+            });
+            req.on('end', async () => {
+                try {
+                    const parsedBody = JSON.parse(Buffer.concat(body).toString());
+                    const user: User = parsedBody.user;
+                    removeMatch(user.id)
+                        .then(() => {
+                            sendSuccessResponse(res);
+                        })
+                        .catch((err) => {
+                            sendErrorResponse(res, err);
+                        });
+                } catch (err: any) {
+                    sendErrorResponse(res, err);
+                }
+            });
+        } else {
+            sendErrorResponse(res, ErrorCode.MethodNotAllowed);
+        }
+    } else if (pathname === '/connectionStatus') {
+        if (req.method === 'POST') {
+            let body: Buffer[] = [];
+            req.on('data', (chunk) => {
+                body.push(chunk);
+            });
+            req.on('end', async () => {
+                try {
+                    const parsedBody = JSON.parse(Buffer.concat(body).toString());
+                    const user: User = parsedBody.user;
+                    checkConnectionStatus(user.id)
+                        .then(mess => {
+                            sendInfoResponse(res, mess);
+                        })
                 } catch (err: any) {
                     sendErrorResponse(res, err);
                 }
