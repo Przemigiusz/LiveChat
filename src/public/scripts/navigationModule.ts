@@ -35,7 +35,7 @@ const navigationModule: NavigationModule = {
             const onError = () => this.loadPage('/error', false);
             connect(onMatch, onError);
         } else if (href === '/chat') {
-            const onDisconnect = () => this.loadPage('/chat', false);
+            const onDisconnect = () => this.loadPage('/', false);
             const onSkip = () => this.loadPage('/chat', false);
             const onError = () => this.loadPage('/error', false);
             setupChat(onDisconnect, onSkip, onError);

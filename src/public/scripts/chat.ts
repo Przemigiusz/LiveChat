@@ -59,69 +59,57 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
 
             let latestMessageTimestamp: number = 0;
 
-            const getMessagesInterval = setInterval(async () => {
-                try {
-                    const response = await getMessages(user.id, latestMessageTimestamp);
-                    if (response.status === 'success') {
-                        if (response.data) {
-                            const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
-                            if (sortedMessages.length > 0) {
-                                latestMessageTimestamp = sortedMessages[sortedMessages.length - 1].timestamp;
-                            }
-
-                            sortedMessages.forEach((message: ChatMessage) => {
-                                const messageDiv = document.createElement('div');
-                                messageDiv.classList.add('message');
-                                messageDiv.classList.add(message.sender.id === user.id ? 'sender-message' : 'receiver-message');
-
-                                const usernameP = document.createElement('p');
-                                usernameP.classList.add('username');
-                                usernameP.textContent = message.sender.username;
-
-                                const contentDiv = document.createElement('div');
-                                contentDiv.classList.add('message-content');
-
-                                const contentP = document.createElement('p');
-                                contentP.textContent = message.content;
-
-                                contentDiv.appendChild(contentP);
-                                messageDiv.appendChild(usernameP);
-                                messageDiv.appendChild(contentDiv);
-
-                                chatMessages.appendChild(messageDiv);
-                            });
+            async function getMessagesLoop() {
+                const response = await getMessages(user.id, latestMessageTimestamp);
+                if (response.status === 'success') {
+                    if (response.data) {
+                        const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
+                        if (sortedMessages.length > 0) {
+                            latestMessageTimestamp = sortedMessages[sortedMessages.length - 1].timestamp;
                         }
-                    } else {
-                        if (response.status === 'info') console.info(response.message);
-                        else throw new Error(response.message);
+
+                        sortedMessages.forEach((message: ChatMessage) => {
+                            const messageDiv = document.createElement('div');
+                            messageDiv.classList.add('message');
+                            messageDiv.classList.add(message.sender.id === user.id ? 'sender-message' : 'receiver-message');
+
+                            const usernameP = document.createElement('p');
+                            usernameP.classList.add('username');
+                            usernameP.textContent = message.sender.username;
+
+                            const contentDiv = document.createElement('div');
+                            contentDiv.classList.add('message-content');
+
+                            const contentP = document.createElement('p');
+                            contentP.textContent = message.content;
+
+                            contentDiv.appendChild(contentP);
+                            messageDiv.appendChild(usernameP);
+                            messageDiv.appendChild(contentDiv);
+
+                            chatMessages.appendChild(messageDiv);
+                        });
+                        setTimeout(getMessagesLoop, 5000);
                     }
-                } catch (err) {
-                    clearInterval(getMessagesInterval);
-                    console.error(err);
-                    onError();
+                } else {
+                    if (response.status === 'info') console.info(response.message);
+                    else throw new Error(response.message);
                 }
-            }, 2500);
+            }
+
+            getMessagesLoop();
 
             disconnectButton.addEventListener('click', async () => {
-                clearInterval(getMessagesInterval);
                 const response = await disconnect(user.id);
-                if (response.status === 'success') {
-                    onDisconnect();
-                } else {
+                if (response.status === 'success') onDisconnect();
+                else {
                     if (response.status === 'info') console.info(response.message);
                     else throw new Error(response.message);
                 }
             });
 
-            const connectionStatusResponse = await getConnectionStatus(user.id);
-            if (connectionStatusResponse.status === 'info') {
-                clearInterval(getMessagesInterval);
-                connectionStatus.style.backgroundColor = '#dc2f02';
-            }
-
             getConnectionStatus(user.id)
                 .then(response => {
-                    clearInterval(getMessagesInterval);
                     if (response.status === 'info') connectionStatus.style.backgroundColor = '#dc2f02';
                     else throw new Error(response.message);
                 });
