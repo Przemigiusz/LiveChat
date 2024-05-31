@@ -1,38 +1,36 @@
 import { User, ChatMessage, ErrorResponse, SuccessResponse, InfoResponse, InfoCode } from "../../models/interfaces.js";
 
-function getMessages(user: User, latestMessageTimestamp: number): Promise<ErrorResponse | SuccessResponse<ChatMessage[]>> {
-    return fetch('/messages', {
-        method: 'POST',
-        body: JSON.stringify({ user: user, method: 'GET', latestMessageTimestamp: latestMessageTimestamp }),
+function getMessages(userId: string, latestMessageTimestamp: number): Promise<ErrorResponse | SuccessResponse<ChatMessage[]> | InfoResponse> {
+    return fetch(`/messages/${userId}?latestMessageTimestamp=${latestMessageTimestamp}`, {
+        method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function sendMessage(user: User, message: ChatMessage): Promise<ErrorResponse | SuccessResponse<void>> {
+function sendMessage(userId: string, message: ChatMessage): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
     return fetch('/messages', {
         method: 'POST',
-        body: JSON.stringify({ user: user, message: message, method: 'POST' }),
+        body: JSON.stringify({ userId: userId, message: message }),
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function disconnect(user: User): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
+function disconnect(userId: string): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
     return fetch('/disconnect', {
         method: 'POST',
-        body: JSON.stringify({ user: user }),
+        body: JSON.stringify({ userId: userId }),
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function checkConnectionStatus(user: User): Promise<InfoResponse> {
-    return fetch('/connectionStatus', {
-        method: 'POST',
-        body: JSON.stringify({ user: user }),
+function getConnectionStatus(userId: string): Promise<ErrorResponse | InfoResponse> {
+    return fetch(`/connectionStatus/${userId}`, {
+        method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-export default async function setupChat(onDisconnect: () => void, onSkip: () => void): Promise<void> {
+export default async function setupChat(onDisconnect: () => void, onSkip: () => void, onError: () => void): Promise<void> {
     const messageForm = document.querySelector('#message-form') as HTMLFormElement;
     const messageInput = document.querySelector('#message-form input') as HTMLInputElement;
     const chatMessages = document.querySelector('.chat .messages') as HTMLDivElement;
@@ -44,9 +42,7 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
         try {
             const item = sessionStorage.getItem('customUser');
             const user: User = item ? JSON.parse(item) : null;
-            if (!user) {
-                throw new Error('User not found');
-            }
+            if (!user) throw new Error('User not found');
 
             const submitCallback = async (evt: Event) => {
                 evt.preventDefault();
@@ -54,20 +50,18 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
                 messageInput.value = '';
 
                 const message: ChatMessage = { id: '', sender: user, content: messageContent, timestamp: Date.now() };
-                const response = await sendMessage(user, message);
+                const response = await sendMessage(user.id, message);
 
-                if (response.status !== 'success') {
-                    console.error(response.message);
-                };
+                if (response.status === 'info') console.info(response.message);
             }
 
             messageForm.addEventListener('submit', submitCallback);
 
             let latestMessageTimestamp: number = 0;
 
-            const getMessagesIntervalId = setInterval(async () => {
+            const getMessagesInterval = setInterval(async () => {
                 try {
-                    const response = await getMessages(user, latestMessageTimestamp);
+                    const response = await getMessages(user.id, latestMessageTimestamp);
                     if (response.status === 'success') {
                         if (response.data) {
                             const sortedMessages = response.data.sort((a, b) => a.timestamp - b.timestamp);
@@ -98,33 +92,43 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
                             });
                         }
                     } else {
-                        console.error(response.message);
+                        if (response.status === 'info') console.info(response.message);
+                        else throw new Error(response.message);
                     }
                 } catch (err) {
-                    clearInterval(getMessagesIntervalId);
+                    clearInterval(getMessagesInterval);
                     console.error(err);
+                    onError();
                 }
             }, 2500);
 
             disconnectButton.addEventListener('click', async () => {
-                const response = await disconnect(user);
-                clearInterval(getMessagesIntervalId);
+                clearInterval(getMessagesInterval);
+                const response = await disconnect(user.id);
                 if (response.status === 'success') {
                     onDisconnect();
                 } else {
-                    if (response.status === 'error') throw new Error(response.message);
-                    else console.info(response.message);
+                    if (response.status === 'info') console.info(response.message);
+                    else throw new Error(response.message);
                 }
             });
 
-            const connectionStatusResponse = await checkConnectionStatus(user);
-            if (connectionStatusResponse.status === 'info' && connectionStatusResponse.code === InfoCode.DisconnectOccured) {
-                clearInterval(getMessagesIntervalId);
+            const connectionStatusResponse = await getConnectionStatus(user.id);
+            if (connectionStatusResponse.status === 'info') {
+                clearInterval(getMessagesInterval);
                 connectionStatus.style.backgroundColor = '#dc2f02';
             }
 
+            getConnectionStatus(user.id)
+                .then(response => {
+                    clearInterval(getMessagesInterval);
+                    if (response.status === 'info') connectionStatus.style.backgroundColor = '#dc2f02';
+                    else throw new Error(response.message);
+                });
+
         } catch (err) {
             console.error(err);
+            onError();
         }
 
     } else {

@@ -1,10 +1,11 @@
 export enum ErrorCode {
-    MatchNotFound = 'MATCH_NOT_FOUND',
     UserNotFound = 'USER_NOT_FOUND',
-    ConversationNotFound = 'CONVERSATION_NOT_FOUND',
     AddUserError = 'ADD_USER_ERROR',
     RemoveUserError = 'REMOVE_USER_ERROR',
     NoUserId = 'NO_USER_ID',
+    NoUsername = 'NO_USER_USERNAME',
+    NoMessageTimestamp = 'NO_MESSAGE_TIMESTAMP',
+    NoMessage = 'NO_MESSAGE',
     MethodNotAllowed = 'METHOD_NOT_ALLOWED',
     ServerError = 'SERVER_ERROR',
 }
@@ -13,15 +14,17 @@ export enum InfoCode {
     Timeout = 'TIMEOUT',
     DisconnectNotAllowed = 'DISCONNECT_NOT_ALLOWED',
     DisconnectOccured = 'DISCONNECT_OCCURED',
+    ConversationNotFound = 'CONVERSATION_NOT_FOUND'
 }
 
 export const ErrorMessage: { [key in ErrorCode]: string } = {
-    [ErrorCode.MatchNotFound]: 'Match not found.',
     [ErrorCode.UserNotFound]: 'User not found.',
-    [ErrorCode.ConversationNotFound]: 'Conversation not found.',
     [ErrorCode.AddUserError]: 'Error adding user.',
     [ErrorCode.RemoveUserError]: 'Error removing user.',
     [ErrorCode.NoUserId]: 'No user ID provided.',
+    [ErrorCode.NoUsername]: 'No username provided.',
+    [ErrorCode.NoMessageTimestamp]: 'No message timestamp provided.',
+    [ErrorCode.NoMessage]: 'No message provided.',
     [ErrorCode.MethodNotAllowed]: 'Method not allowed.',
     [ErrorCode.ServerError]: 'Server error.',
 }
@@ -30,6 +33,7 @@ export const InfoMessage: { [key in InfoCode]: string } = {
     [InfoCode.Timeout]: 'Request timed out.',
     [InfoCode.DisconnectNotAllowed]: 'Match canceled.',
     [InfoCode.DisconnectOccured]: 'Match disconnected.',
+    [InfoCode.ConversationNotFound]: 'Conversation not found.',
 }
 
 export interface ErrorResponse {

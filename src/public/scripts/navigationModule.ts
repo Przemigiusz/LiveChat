@@ -31,9 +31,14 @@ const navigationModule: NavigationModule = {
         }
 
         if (href === '/') {
-            connect(() => this.loadPage('/chat', false));
+            const onMatch = () => this.loadPage('/chat', false);
+            const onError = () => this.loadPage('/error', false);
+            connect(onMatch, onError);
         } else if (href === '/chat') {
-            setupChat(() => this.loadPage('/', false), () => this.loadPage('/chat', false));
+            const onDisconnect = () => this.loadPage('/chat', false);
+            const onSkip = () => this.loadPage('/chat', false);
+            const onError = () => this.loadPage('/error', false);
+            setupChat(onDisconnect, onSkip, onError);
         }
 
     },
@@ -45,7 +50,8 @@ const navigationModule: NavigationModule = {
     init: function () {
         return Promise.all([
             this.fetchPage('/html/start.html', '/'),
-            this.fetchPage('/html/chat.html', '/chat')
+            this.fetchPage('/html/chat.html', '/chat'),
+            this.fetchPage('/html/error.html', '/error')
         ]).then(() => {
             this.loadPage(window.location.pathname, false);
             window.addEventListener('popstate', () => this.loadPage(window.location.pathname, false));

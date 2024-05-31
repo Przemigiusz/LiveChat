@@ -8,11 +8,10 @@ let pool: User[] = [];
 let potentialMatches: [User, User][] = [];
 let matched: [User, User, ChatMessage[]][] = [];
 
-function addToPool(body: Buffer[]): Promise<User> {
+function addToPool(username: string): Promise<User> {
     return new Promise((resolve, reject) => {
         try {
-            let user: User = JSON.parse(Buffer.concat(body).toString());
-            user.id = crypto.randomUUID();
+            const user: User = { id: crypto.randomUUID(), username: username };
             pool.push(user);
             resolve(user);
         } catch (err) {
@@ -29,7 +28,7 @@ function removeFromPool(userId: string): Promise<void> {
             pool.splice(userIndex, 1);
             resolve();
         } else {
-            if (matchIndex !== -1) reject(InfoCode.DisconnectNotAllowed);
+            if (userIndex !== -1 && matchIndex !== -1) reject(InfoCode.DisconnectNotAllowed);
             else reject(ErrorCode.RemoveUserError);
         }
     });
@@ -52,9 +51,9 @@ function matchUsers(userId: string): Promise<void> {
                     clearInterval(matchInterval);
                     reject(ErrorCode.UserNotFound);
                 } else {
-                    const ourMatch = potentialMatches.find(match => match[0].id === user1.id || match[1].id === user1.id); // czy zostalismy potencjalnie zmatchowani
+                    const ourMatch = potentialMatches.find(match => match[0].id === user1.id || match[1].id === user1.id);
                     if (ourMatch) {
-                        const ourDefiniteMatch = matched.find(match => match[0].id === user1.id || match[1].id === user1.id); // czy zostalismy definitywnie zmatchowani
+                        const ourDefiniteMatch = matched.find(match => match[0].id === user1.id || match[1].id === user1.id);
                         if (!ourDefiniteMatch) matched.push([ourMatch[0], ourMatch[1], []]);
                         else potentialMatches = potentialMatches.filter(match => match[0].id !== user1.id && match[1].id !== user1.id);
                         pool = pool.filter(user => user.id !== user1.id);
@@ -83,23 +82,21 @@ function removeMatch(userId: string): Promise<void> {
             matched.splice(matchIndex, 1);
             resolve();
         } else {
-            reject(ErrorCode.MatchNotFound);
+            reject(InfoCode.DisconnectOccured);
         }
     })
 }
 
-function sendMessage(user: User, message: ChatMessage): Promise<void> {
+function sendMessage(userId: string, message: ChatMessage): Promise<void> {
     return new Promise((resolve, reject) => {
         try {
-            const match = matched.find(match => {
-                return match[0].id === user.id || match[1].id === user.id;
-            });
+            const match = matched.find(match => match[0].id === userId || match[1].id === userId);
             if (match) {
                 message.id = crypto.randomUUID();
                 match[2].push(message);
                 resolve();
             } else {
-                reject(ErrorCode.ConversationNotFound);
+                reject(InfoCode.ConversationNotFound);
             }
         } catch (err) {
             reject(err);
@@ -107,21 +104,19 @@ function sendMessage(user: User, message: ChatMessage): Promise<void> {
     })
 }
 
-function getMessages(user: User, latestMessageTimestamp: number): Promise<ChatMessage[]> {
+function getMessages(userId: string, latestMessageTimestamp: number): Promise<ChatMessage[]> {
     return new Promise((resolve, reject) => {
-        const match = matched.find(match => {
-            return match[0].id === user.id || match[1].id === user.id;
-        });
+        const match = matched.find(match => match[0].id === userId || match[1].id === userId);
         if (match) {
             const messages: ChatMessage[] = match[2].filter(message => message.timestamp > latestMessageTimestamp);
             resolve(messages);
         } else {
-            reject(ErrorCode.ConversationNotFound);
+            reject(InfoCode.ConversationNotFound);
         }
     });
 }
 
-function checkConnectionStatus(userId: string): Promise<InfoCode> {
+function getConnectionStatus(userId: string): Promise<InfoCode> {
     return new Promise((resolve, reject) => {
         const connectionInterval = setInterval(() => {
             const matchIndex = matched.findIndex(match => match[0].id === userId || match[1].id === userId);
@@ -161,15 +156,22 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
             });
             req.on('end', async () => {
                 try {
-                    const user = await addToPool(body);
-                    sendSuccessResponse(res, user);
+                    const username: string = JSON.parse(Buffer.concat(body).toString()).username;
+                    if (username && username.trim() !== '') {
+                        addToPool(username).then(user => {
+                            sendSuccessResponse(res, user);
+                        });
+                    } else {
+                        sendErrorResponse(res, ErrorCode.NoUsername);
+                    }
+
                 } catch (err: any) {
                     sendErrorResponse(res, err);
                 }
             });
         } else if (req.method === 'DELETE') {
             const userId = pathname.split('/')[2];
-            if (userId) {
+            if (userId && userId.trim() !== '') {
                 removeFromPool(userId)
                     .then(() => {
                         sendSuccessResponse(res);
@@ -193,14 +195,18 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
             req.on('end', async () => {
                 try {
                     const userId: string = JSON.parse(Buffer.concat(body).toString()).userId;
-                    matchUsers(userId)
-                        .then(() => {
-                            sendSuccessResponse(res);
-                        })
-                        .catch(code => {
-                            if (code === InfoCode.Timeout) sendInfoResponse(res, code);
-                            else sendErrorResponse(res, code);
-                        });
+                    if (userId && userId.trim() !== '') {
+                        matchUsers(userId)
+                            .then(() => {
+                                sendSuccessResponse(res);
+                            })
+                            .catch(code => {
+                                if (code === InfoCode.Timeout) sendInfoResponse(res, code);
+                                else sendErrorResponse(res, code);
+                            });
+                    } else {
+                        sendErrorResponse(res, ErrorCode.NoUserId);
+                    }
                 } catch (err: any) {
                     sendErrorResponse(res, err);
                 }
@@ -208,7 +214,7 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
         } else {
             sendErrorResponse(res, ErrorCode.MethodNotAllowed);
         }
-    } else if (pathname === '/messages') {
+    } else if (pathname.startsWith('/messages')) {
         if (req.method === 'POST') {
             let body: Buffer[] = [];
             req.on('data', (chunk) => {
@@ -217,31 +223,44 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
             req.on('end', async () => {
                 try {
                     const parsedBody = JSON.parse(Buffer.concat(body).toString());
-                    const user: User = parsedBody.user;
-                    if (parsedBody.method === 'GET') {
-                        const latestMessageTimestamp: number = parsedBody.latestMessageTimestamp;
-                        getMessages(user, latestMessageTimestamp)
-                            .then(messages => {
-                                sendSuccessResponse(res, messages);
-                            })
-                            .catch((err) => {
-                                sendErrorResponse(res, err);
-                            });
-                    } else if (parsedBody.method === 'POST') {
-                        const message: ChatMessage = parsedBody.message;
-                        sendMessage(user, message)
+                    const userId: string = parsedBody.userId;
+                    const message: ChatMessage = parsedBody.message;
+                    if (userId && userId.trim() !== '' && message) {
+                        sendMessage(userId, message)
                             .then(() => {
                                 sendSuccessResponse(res);
                             })
-                            .catch((err) => {
-                                sendErrorResponse(res, err);
+                            .catch(err => {
+                                if (err === InfoCode.ConversationNotFound) sendInfoResponse(res, err);
+                                else sendErrorResponse(res, err);
                             });
+                    } else {
+                        if (!userId || userId.trim() === '') sendErrorResponse(res, ErrorCode.NoUserId);
+                        else sendErrorResponse(res, ErrorCode.NoMessage);
                     }
-                } catch (err: any) {
+                }
+                catch (err: any) {
                     sendErrorResponse(res, err);
                 }
             });
-        } else {
+        } else if (req.method === 'GET') {
+            const url = new URL(req.url || '', `http://${req.headers.host}`);
+            const userId = url.pathname.split('/')[2];
+            const latestMessageTimestamp = Number(url.searchParams.get('latestMessageTimestamp'));
+            if (userId && userId.trim() !== '' && !isNaN(latestMessageTimestamp) && latestMessageTimestamp >= 0) {
+                getMessages(userId, latestMessageTimestamp)
+                    .then(messages => {
+                        sendSuccessResponse(res, messages);
+                    })
+                    .catch(code => {
+                        sendInfoResponse(res, code);
+                    });
+            } else {
+                if (!userId || userId.trim() === '') sendErrorResponse(res, ErrorCode.NoUserId);
+                else sendErrorResponse(res, ErrorCode.NoMessageTimestamp);
+            }
+        }
+        else {
             sendErrorResponse(res, ErrorCode.MethodNotAllowed);
         }
     } else if (pathname === '/disconnect') {
@@ -252,15 +271,19 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
             });
             req.on('end', async () => {
                 try {
-                    const parsedBody = JSON.parse(Buffer.concat(body).toString());
-                    const user: User = parsedBody.user;
-                    removeMatch(user.id)
-                        .then(() => {
-                            sendSuccessResponse(res);
-                        })
-                        .catch((err) => {
-                            sendErrorResponse(res, err);
-                        });
+                    const userId: string = JSON.parse(Buffer.concat(body).toString()).userId;
+                    if (userId && userId.trim() !== '') {
+                        removeMatch(userId)
+                            .then(() => {
+                                sendSuccessResponse(res);
+                            })
+                            .catch(code => {
+                                sendInfoResponse(res, code);
+                            });
+                    } else {
+                        sendErrorResponse(res, ErrorCode.NoUserId);
+                    }
+
                 } catch (err: any) {
                     sendErrorResponse(res, err);
                 }
@@ -268,22 +291,21 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
         } else {
             sendErrorResponse(res, ErrorCode.MethodNotAllowed);
         }
-    } else if (pathname === '/connectionStatus') {
-        if (req.method === 'POST') {
+    } else if (pathname.startsWith('/connectionStatus')) {
+        if (req.method === 'GET') {
             let body: Buffer[] = [];
             req.on('data', (chunk) => {
                 body.push(chunk);
             });
             req.on('end', async () => {
-                try {
-                    const parsedBody = JSON.parse(Buffer.concat(body).toString());
-                    const user: User = parsedBody.user;
-                    checkConnectionStatus(user.id)
+                const userId = pathname.split('/')[2];
+                if (userId && userId.trim() !== '') {
+                    getConnectionStatus(userId)
                         .then(mess => {
                             sendInfoResponse(res, mess);
                         })
-                } catch (err: any) {
-                    sendErrorResponse(res, err);
+                } else {
+                    sendErrorResponse(res, ErrorCode.NoUserId);
                 }
             });
         } else {

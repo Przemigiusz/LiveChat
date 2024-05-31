@@ -23,7 +23,7 @@ function match(userId: string): Promise<ErrorResponse | SuccessResponse<void> | 
     }).then(response => response.json());
 }
 
-export default function connect(onMatchFound: () => void): void {
+export default function connect(onMatch: () => void, onError: () => void): void {
     const usernameForm = document.querySelector('#username-form') as HTMLFormElement;
     const connectBtn = document.querySelector('#username-form button') as HTMLButtonElement;
     const usernameInput = document.querySelector('#username-form input') as HTMLInputElement;
@@ -35,25 +35,21 @@ export default function connect(onMatchFound: () => void): void {
     let user: User;
 
     const stopMatching = async () => {
-        try {
-            const response = await removeFromPool(user.id);
-            if (response.status === 'success') {
-                spinner.classList.toggle('visible');
-                connectBtn.textContent = 'Connect';
-                if (connectionTries >= maxConnections) {
-                    connectBtn.disabled = true;
-                    alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
-                    setTimeout(() => {
-                        connectBtn.disabled = false;
-                        connectionTries = 0;
-                    }, 30000);
-                }
-            } else {
-                if (response.status === 'error') throw new Error(response.message);
-                else console.info(response.message);
+        const response = await removeFromPool(user.id);
+        if (response.status === 'success') {
+            spinner.classList.toggle('visible');
+            connectBtn.textContent = 'Connect';
+            if (connectionTries >= maxConnections) {
+                connectBtn.disabled = true;
+                alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
+                setTimeout(() => {
+                    connectBtn.disabled = false;
+                    connectionTries = 0;
+                }, 30000);
             }
-        } catch (err) {
-            console.error(err);
+        } else {
+            if (response.status === 'error') throw new Error(response.message);
+            else console.info(response.message);
         }
     }
 
@@ -72,9 +68,9 @@ export default function connect(onMatchFound: () => void): void {
                         sessionStorage.setItem('customUser', JSON.stringify(user));
                         const matchResponse = await match(user.id);
                         if (matchResponse.status === 'success') {
-                            onMatchFound();
+                            onMatch();
                         } else {
-                            stopMatching();
+                            await stopMatching();
                             if (matchResponse.status === 'error') throw new Error(matchResponse.message);
                             else console.info(matchResponse.message);
                         }
@@ -82,12 +78,14 @@ export default function connect(onMatchFound: () => void): void {
                 }
             } catch (err) {
                 console.error(err);
+                onError();
             }
         } else {
             try {
-                stopMatching();
+                await stopMatching();
             } catch (err) {
                 console.error(err);
+                onError();
             }
         }
     })
