@@ -40,36 +40,47 @@ function getConnectionStatus(userId: string): Promise<ErrorResponse | InfoRespon
 }
 
 export default async function setupChat(onDisconnect: () => void, onSkip: () => void, onError: () => void): Promise<void> {
-    const messageForm = document.querySelector('#message-form') as HTMLFormElement;
-    const messageInput = document.querySelector('#message-form input') as HTMLInputElement;
-    const chatMessages = document.querySelector('.chat .messages') as HTMLDivElement;
-    const connectionStatus = document.querySelector('.chat .connection-status span') as HTMLSpanElement;
-    const skipButton = document.querySelector('.chat-navigation .skip') as HTMLButtonElement;
-    const disconnectButton = document.querySelector('.chat-navigation .disconnect') as HTMLButtonElement;
-    const spinner = document.querySelector('.spinner') as HTMLDivElement;
+    let errorOccured = false;
+    const handleError = (err: unknown) => {
+        console.error(err);
+        if (!errorOccured) {
+            onError();
+            errorOccured = true;
+        }
+    };
 
-    if (messageForm && messageInput && chatMessages && connectionStatus && skipButton && disconnectButton) {
-        try {
-            const item = sessionStorage.getItem('customUser');
-            const user: User = item ? JSON.parse(item) : null;
-            if (!user) throw new Error('User not found');
+    try {
+        const messageForm = document.querySelector('#message-form') as HTMLFormElement;
+        const messageInput = document.querySelector('#message-form input') as HTMLInputElement;
+        const chatMessages = document.querySelector('.chat .messages') as HTMLDivElement;
+        const connectionStatus = document.querySelector('.chat .connection-status span') as HTMLSpanElement;
+        const skipButton = document.querySelector('.chat-navigation .skip') as HTMLButtonElement;
+        const disconnectButton = document.querySelector('.chat-navigation .disconnect') as HTMLButtonElement;
+        const spinner = document.querySelector('.spinner') as HTMLDivElement;
 
-            const submitCallback = async (evt: Event) => {
-                evt.preventDefault();
-                const messageContent = messageInput.value;
-                messageInput.value = '';
+        if (!messageForm || !messageInput || !chatMessages || !connectionStatus || !skipButton || !disconnectButton) throw new Error('Page content was not generated correctly.');
 
-                const message: ChatMessage = { id: '', sender: user, content: messageContent, timestamp: Date.now() };
-                const response = await sendMessage(user.id, message);
+        const item = sessionStorage.getItem('customUser');
+        const user: User = item ? JSON.parse(item) : null;
+        if (!user) throw new Error('User not found');
 
-                if (response.status === 'info') console.info(response.message);
-            }
+        const submitCallback = async (evt: Event) => {
+            evt.preventDefault();
+            const messageContent = messageInput.value;
+            messageInput.value = '';
 
-            messageForm.addEventListener('submit', submitCallback);
+            const message: ChatMessage = { id: '', sender: user, content: messageContent, timestamp: Date.now() };
+            const response = await sendMessage(user.id, message);
 
-            let latestMessageTimestamp: number = 0;
+            if (response.status === 'info') console.info(response.message);
+        }
 
-            async function getMessagesLoop() {
+        messageForm.addEventListener('submit', submitCallback);
+
+        let latestMessageTimestamp: number = 0;
+
+        const getMessagesLoop = async () => {
+            try {
                 const response = await getMessages(user.id, latestMessageTimestamp);
                 if (response.status === 'success') {
                     if (response.data) {
@@ -105,62 +116,70 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
                     if (response.status === 'info') console.info(response.message);
                     else throw new Error(response.message);
                 }
+            } catch (err) {
+                handleError(err);
             }
+        }
 
-            getMessagesLoop();
+        await getMessagesLoop();
 
-            disconnectButton.addEventListener('click', async () => {
+        disconnectButton.addEventListener('click', async () => {
+            try {
                 const response = await disconnect(user.id);
                 if (response.status === 'success') onDisconnect();
                 else {
-                    if (response.status === 'info') console.info(response.message);
+                    if (response.status === 'info') {
+                        console.info(response.message);
+                        onDisconnect();
+                    }
                     else throw new Error(response.message);
                 }
-            });
+            } catch (err) {
+                handleError(err);
+            }
+        });
 
-            const stopMatching = async () => {
+        const stopMatching = async () => {
+            try {
                 const response = await removeFromPool(user.id);
                 if (response.status === 'success') spinner.classList.toggle('visible');
                 else {
                     if (response.status === 'error') throw new Error(response.message);
                     else console.info(response.message);
                 }
+            } catch (err) {
+                handleError(err);
             }
-
-            skipButton.addEventListener('click', async () => {
-                disconnect(user.id)
-                    .then(response => {
-                        if (response.status === 'info') console.info(response.message);
-                        else if (response.status === 'error') throw new Error(response.message);
-                        addToPool(user)
-                            .then(async (response) => {
-                                if (response.status === 'success') {
-                                    spinner.classList.toggle('visible');
-                                    const matchResponse = await match(user.id);
-                                    if (matchResponse.status === 'success') onSkip();
-                                    else {
-                                        if (matchResponse.status === 'error') throw new Error(matchResponse.message);
-                                        else console.info(matchResponse.message);
-                                        await stopMatching();
-                                    }
-                                }
-                            })
-                    });
-            })
-
-            getConnectionStatus(user.id)
-                .then(response => {
-                    if (response.status === 'info') connectionStatus.style.backgroundColor = '#dc2f02';
-                    else throw new Error(response.message);
-                });
-
-        } catch (err) {
-            console.error(err);
-            onError();
         }
 
-    } else {
-        console.error('Page content was not generated correctly.');
+        skipButton.addEventListener('click', async () => {
+            try {
+                const disconnectResponse = await disconnect(user.id);
+                if (disconnectResponse.status === 'info') console.info(disconnectResponse.message);
+                else if (disconnectResponse.status === 'error') throw new Error(disconnectResponse.message);
+
+                const poolResponse = await addToPool(user);
+                if (poolResponse.status === 'success') {
+                    spinner.classList.toggle('visible');
+                    const matchResponse = await match(user.id);
+                    if (matchResponse.status === 'success') onSkip();
+                    else {
+                        if (matchResponse.status === 'error') throw new Error(matchResponse.message);
+                        else console.info(matchResponse.message);
+                        await stopMatching();
+                    }
+                } else throw new Error(poolResponse.message);
+            } catch (err) {
+                handleError(err);
+            }
+        })
+
+        const connectionStatusResponse = await getConnectionStatus(user.id);
+        if (connectionStatusResponse.status === 'info') connectionStatus.style.backgroundColor = '#dc2f02';
+        else throw new Error(connectionStatusResponse.message);
+
+    } catch (err) {
+        handleError(err);
     }
 
-};
+}

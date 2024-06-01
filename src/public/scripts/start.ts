@@ -24,69 +24,74 @@ export function match(userId: string): Promise<ErrorResponse | SuccessResponse<v
 }
 
 export default function connect(onMatch: () => void, onError: () => void): void {
-    const usernameForm = document.querySelector('#username-form') as HTMLFormElement;
-    const connectBtn = document.querySelector('#username-form button') as HTMLButtonElement;
-    const usernameInput = document.querySelector('#username-form input') as HTMLInputElement;
-    const spinner = document.querySelector('.spinner') as HTMLDivElement;
+    try {
+        const usernameForm = document.querySelector('#username-form') as HTMLFormElement;
+        const connectBtn = document.querySelector('#username-form button') as HTMLButtonElement;
+        const usernameInput = document.querySelector('#username-form input') as HTMLInputElement;
+        const spinner = document.querySelector('.spinner') as HTMLDivElement;
 
-    let connectionTries = 0;
-    const maxConnections = 5;
+        if (!usernameForm || !connectBtn || !usernameInput || !spinner) throw new Error('Page content was not generated correctly.');
 
-    let user: User;
+        let connectionTries = 0;
+        const maxConnections = 5;
 
-    const stopMatching = async () => {
-        const response = await removeFromPool(user.id);
-        if (response.status === 'success') {
-            spinner.classList.toggle('visible');
-            connectBtn.textContent = 'Connect';
-            if (connectionTries >= maxConnections) {
-                connectBtn.disabled = true;
-                alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
-                setTimeout(() => {
-                    connectBtn.disabled = false;
-                    connectionTries = 0;
-                }, 30000);
-            }
-        } else {
-            if (response.status === 'error') throw new Error(response.message);
-            else console.info(response.message);
-        }
-    }
+        let user: User;
 
-    usernameForm.addEventListener('submit', async (evt) => {
-        evt.preventDefault();
-        spinner.classList.toggle('visible');
-
-        if (spinner.classList.contains('visible')) {
-            connectBtn.textContent = 'Disconnect';
-            ++connectionTries;
+        const stopMatching = async () => {
             try {
-                const response = await addToPool(usernameInput.value);
+                const response = await removeFromPool(user.id);
                 if (response.status === 'success') {
-                    if (response.data) {
-                        user = response.data;
-                        sessionStorage.setItem('customUser', JSON.stringify(user));
-                        const matchResponse = await match(user.id);
-                        if (matchResponse.status === 'success') onMatch();
-                        else {
-                            await stopMatching();
-                            if (matchResponse.status === 'error') throw new Error(matchResponse.message);
-                            else console.info(matchResponse.message);
-                        }
+                    spinner.classList.toggle('visible');
+                    connectBtn.textContent = 'Connect';
+                    if (connectionTries >= maxConnections) {
+                        connectBtn.disabled = true;
+                        alert('You have reached the maximum number of connection attempts. Please wait 30 seconds before trying again.');
+                        setTimeout(() => {
+                            connectBtn.disabled = false;
+                            connectionTries = 0;
+                        }, 30000);
                     }
-                } else throw new Error(response.message);
-            } catch (err) {
-                console.error(err);
-                onError();
-            }
-        } else {
-            try {
-                await stopMatching();
+                } else {
+                    if (response.status === 'error') throw new Error(response.message);
+                    else console.info(response.message);
+                }
             } catch (err) {
                 console.error(err);
                 onError();
             }
         }
-    })
+
+        usernameForm.addEventListener('submit', async (evt) => {
+            try {
+                evt.preventDefault();
+                spinner.classList.toggle('visible');
+
+                if (spinner.classList.contains('visible')) {
+                    connectBtn.textContent = 'Disconnect';
+                    ++connectionTries;
+                    const response = await addToPool(usernameInput.value);
+                    if (response.status === 'success') {
+                        if (response.data) {
+                            user = response.data;
+                            sessionStorage.setItem('customUser', JSON.stringify(user));
+                            const matchResponse = await match(user.id);
+                            if (matchResponse.status === 'success') onMatch();
+                            else {
+                                await stopMatching();
+                                if (matchResponse.status === 'error') throw new Error(matchResponse.message);
+                                else console.info(matchResponse.message);
+                            }
+                        }
+                    } else throw new Error(response.message);
+                } else await stopMatching();
+            } catch (err) {
+                console.error(err);
+                onError();
+            }
+        });
+    } catch (err) {
+        console.error(err);
+        onError();
+    }
 }
 

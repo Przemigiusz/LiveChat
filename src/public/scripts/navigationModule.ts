@@ -1,5 +1,6 @@
 import connect from "./start.js";
 import setupChat from "./chat.js";
+import setupErrorPage from "./error.js";
 
 interface Page {
     path: string;
@@ -39,6 +40,9 @@ const navigationModule: NavigationModule = {
             const onSkip = () => this.loadPage('/chat', false);
             const onError = () => this.loadPage('/error', false);
             setupChat(onDisconnect, onSkip, onError);
+        } else if (href === '/error') {
+            const onGoBack = () => this.loadPage('/', false);
+            setupErrorPage(onGoBack);
         }
 
     },
