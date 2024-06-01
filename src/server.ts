@@ -8,12 +8,19 @@ let pool: User[] = [];
 let potentialMatches: [User, User][] = [];
 let matched: [User, User, ChatMessage[]][] = [];
 
-function addToPool(username: string): Promise<User> {
+function addToPool(username: string): Promise<User>;
+function addToPool(user: User): Promise<void>;
+function addToPool(input: string | User): Promise<User | void> {
     return new Promise((resolve, reject) => {
         try {
-            const user: User = { id: crypto.randomUUID(), username: username };
-            pool.push(user);
-            resolve(user);
+            if (typeof input === 'string') {
+                const user: User = { id: crypto.randomUUID(), username: input };
+                pool.push(user);
+                resolve(user);
+            } else {
+                pool.push(input);
+                resolve();
+            }
         } catch (err) {
             reject(ErrorCode.AddUserError);
         }
@@ -156,15 +163,18 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
             });
             req.on('end', async () => {
                 try {
-                    const username: string = JSON.parse(Buffer.concat(body).toString()).username;
+                    const parsedBody = JSON.parse(Buffer.concat(body).toString());
+                    const username: string = parsedBody.username;
+                    const user: User = parsedBody.user;
                     if (username && username.trim() !== '') {
-                        addToPool(username).then(user => {
-                            sendSuccessResponse(res, user);
-                        });
-                    } else {
-                        sendErrorResponse(res, ErrorCode.NoUsername);
-                    }
-
+                        addToPool(username)
+                            .then(user => sendSuccessResponse(res, user))
+                            .catch(err => sendErrorResponse(res, err));
+                    } else if (user) {
+                        addToPool(user)
+                            .then(() => sendSuccessResponse(res))
+                            .catch(err => sendErrorResponse(res, err));
+                    } else sendErrorResponse(res, ErrorCode.NoUserData);
                 } catch (err: any) {
                     sendErrorResponse(res, err);
                 }
@@ -173,16 +183,12 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
             const userId = pathname.split('/')[2];
             if (userId && userId.trim() !== '') {
                 removeFromPool(userId)
-                    .then(() => {
-                        sendSuccessResponse(res);
-                    })
+                    .then(() => sendSuccessResponse(res))
                     .catch(code => {
                         if (code === InfoCode.DisconnectNotAllowed) sendInfoResponse(res, code);
                         else sendErrorResponse(res, code);
                     });
-            } else {
-                sendErrorResponse(res, ErrorCode.NoUserId);
-            }
+            } else sendErrorResponse(res, ErrorCode.NoUserId);
         } else {
             sendErrorResponse(res, ErrorCode.MethodNotAllowed);
         }
@@ -197,16 +203,12 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                     const userId: string = JSON.parse(Buffer.concat(body).toString()).userId;
                     if (userId && userId.trim() !== '') {
                         matchUsers(userId)
-                            .then(() => {
-                                sendSuccessResponse(res);
-                            })
+                            .then(() => sendSuccessResponse(res))
                             .catch(code => {
                                 if (code === InfoCode.Timeout) sendInfoResponse(res, code);
                                 else sendErrorResponse(res, code);
                             });
-                    } else {
-                        sendErrorResponse(res, ErrorCode.NoUserId);
-                    }
+                    } else sendErrorResponse(res, ErrorCode.NoUserId);
                 } catch (err: any) {
                     sendErrorResponse(res, err);
                 }
@@ -227,9 +229,7 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                     const message: ChatMessage = parsedBody.message;
                     if (userId && userId.trim() !== '' && message) {
                         sendMessage(userId, message)
-                            .then(() => {
-                                sendSuccessResponse(res);
-                            })
+                            .then(() => sendSuccessResponse(res))
                             .catch(err => {
                                 if (err === InfoCode.ConversationNotFound) sendInfoResponse(res, err);
                                 else sendErrorResponse(res, err);
@@ -249,12 +249,8 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
             const latestMessageTimestamp = Number(url.searchParams.get('latestMessageTimestamp'));
             if (userId && userId.trim() !== '' && !isNaN(latestMessageTimestamp) && latestMessageTimestamp >= 0) {
                 getMessages(userId, latestMessageTimestamp)
-                    .then(messages => {
-                        sendSuccessResponse(res, messages);
-                    })
-                    .catch(code => {
-                        sendInfoResponse(res, code);
-                    });
+                    .then(messages => sendSuccessResponse(res, messages))
+                    .catch(code => sendInfoResponse(res, code));
             } else {
                 if (!userId || userId.trim() === '') sendErrorResponse(res, ErrorCode.NoUserId);
                 else sendErrorResponse(res, ErrorCode.NoMessageTimestamp);
@@ -274,16 +270,9 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                     const userId: string = JSON.parse(Buffer.concat(body).toString()).userId;
                     if (userId && userId.trim() !== '') {
                         removeMatch(userId)
-                            .then(() => {
-                                sendSuccessResponse(res);
-                            })
-                            .catch(code => {
-                                sendInfoResponse(res, code);
-                            });
-                    } else {
-                        sendErrorResponse(res, ErrorCode.NoUserId);
-                    }
-
+                            .then(() => sendSuccessResponse(res))
+                            .catch(code => sendInfoResponse(res, code));
+                    } else sendErrorResponse(res, ErrorCode.NoUserId);
                 } catch (err: any) {
                     sendErrorResponse(res, err);
                 }
@@ -301,12 +290,8 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
                 const userId = pathname.split('/')[2];
                 if (userId && userId.trim() !== '') {
                     getConnectionStatus(userId)
-                        .then(mess => {
-                            sendInfoResponse(res, mess);
-                        })
-                } else {
-                    sendErrorResponse(res, ErrorCode.NoUserId);
-                }
+                        .then(mess => sendInfoResponse(res, mess))
+                } else sendErrorResponse(res, ErrorCode.NoUserId);
             });
         } else {
             sendErrorResponse(res, ErrorCode.MethodNotAllowed);
@@ -337,9 +322,8 @@ const server = http.createServer((req: http.IncomingMessage, res: http.ServerRes
         }
 
         fs.readFile(filePath, (err: NodeJS.ErrnoException | null, data: Buffer) => {
-            if (err) {
-                sendErrorResponse(res, ErrorCode.ServerError);
-            } else {
+            if (err) sendErrorResponse(res, ErrorCode.ServerError);
+            else {
                 res.writeHead(200, { 'Content-Type': contentType });
                 res.end(data, 'utf-8');
             }

@@ -1,4 +1,13 @@
 import { User, ChatMessage, ErrorResponse, SuccessResponse, InfoResponse, InfoCode } from "../../models/interfaces.js";
+import { match, removeFromPool } from "./start.js";
+
+function addToPool(user: User): Promise<ErrorResponse | SuccessResponse<void>> {
+    return fetch('/pool', {
+        method: 'POST',
+        body: JSON.stringify({ user: user }),
+        headers: { 'Content-Type': 'application/json' }
+    }).then(response => response.json());
+}
 
 function getMessages(userId: string, latestMessageTimestamp: number): Promise<ErrorResponse | SuccessResponse<ChatMessage[]> | InfoResponse> {
     return fetch(`/messages/${userId}?latestMessageTimestamp=${latestMessageTimestamp}`, {
@@ -37,6 +46,7 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
     const connectionStatus = document.querySelector('.chat .connection-status span') as HTMLSpanElement;
     const skipButton = document.querySelector('.chat-navigation .skip') as HTMLButtonElement;
     const disconnectButton = document.querySelector('.chat-navigation .disconnect') as HTMLButtonElement;
+    const spinner = document.querySelector('.spinner') as HTMLDivElement;
 
     if (messageForm && messageInput && chatMessages && connectionStatus && skipButton && disconnectButton) {
         try {
@@ -107,6 +117,36 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
                     else throw new Error(response.message);
                 }
             });
+
+            const stopMatching = async () => {
+                const response = await removeFromPool(user.id);
+                if (response.status === 'success') spinner.classList.toggle('visible');
+                else {
+                    if (response.status === 'error') throw new Error(response.message);
+                    else console.info(response.message);
+                }
+            }
+
+            skipButton.addEventListener('click', async () => {
+                disconnect(user.id)
+                    .then(response => {
+                        if (response.status === 'info') console.info(response.message);
+                        else if (response.status === 'error') throw new Error(response.message);
+                        addToPool(user)
+                            .then(async (response) => {
+                                if (response.status === 'success') {
+                                    spinner.classList.toggle('visible');
+                                    const matchResponse = await match(user.id);
+                                    if (matchResponse.status === 'success') onSkip();
+                                    else {
+                                        if (matchResponse.status === 'error') throw new Error(matchResponse.message);
+                                        else console.info(matchResponse.message);
+                                        await stopMatching();
+                                    }
+                                }
+                            })
+                    });
+            })
 
             getConnectionStatus(user.id)
                 .then(response => {

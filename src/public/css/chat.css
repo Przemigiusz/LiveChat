@@ -109,3 +109,8 @@
 .chat-navigation button {
     width: 100px;
 }
+
+.chat .spinner {
+    margin: 0 auto;
+    margin-top: 3rem;
+}

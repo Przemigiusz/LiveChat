@@ -61,3 +61,22 @@ main {
     background-color: var(--b-color);
     color: var(--a-color);
 }
+
+.spinner {
+    display: none;
+    border: 3px dotted var(--b-color);
+    height: 2.5rem;
+    width: 2.5rem;
+    border-radius: 50%;
+    animation: spin 3s linear infinite;
+}
+
+.spinner.visible {
+    display: block;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

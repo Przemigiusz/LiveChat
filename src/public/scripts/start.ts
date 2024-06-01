@@ -1,6 +1,6 @@
 import { User, ErrorResponse, SuccessResponse, InfoResponse, ErrorCode, InfoCode } from '../../models/interfaces.js';
 
-function addToPool(username: string): Promise<ErrorResponse | SuccessResponse<User>> {
+export function addToPool(username: string): Promise<ErrorResponse | SuccessResponse<User>> {
     return fetch('/pool', {
         method: 'POST',
         body: JSON.stringify({ username: username }),
@@ -8,14 +8,14 @@ function addToPool(username: string): Promise<ErrorResponse | SuccessResponse<Us
     }).then(response => response.json());
 }
 
-function removeFromPool(userId: string): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
+export function removeFromPool(userId: string): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
     return fetch(`/pool/${userId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json());
 }
 
-function match(userId: string): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
+export function match(userId: string): Promise<ErrorResponse | SuccessResponse<void> | InfoResponse> {
     return fetch('/match', {
         method: 'POST',
         body: JSON.stringify({ userId: userId }),
@@ -67,15 +67,14 @@ export default function connect(onMatch: () => void, onError: () => void): void 
                         user = response.data;
                         sessionStorage.setItem('customUser', JSON.stringify(user));
                         const matchResponse = await match(user.id);
-                        if (matchResponse.status === 'success') {
-                            onMatch();
-                        } else {
+                        if (matchResponse.status === 'success') onMatch();
+                        else {
                             await stopMatching();
                             if (matchResponse.status === 'error') throw new Error(matchResponse.message);
                             else console.info(matchResponse.message);
                         }
                     }
-                }
+                } else throw new Error(response.message);
             } catch (err) {
                 console.error(err);
                 onError();
