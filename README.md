@@ -7,9 +7,13 @@ This is a web application project that allows You to talk to people over the Int
 ## What Is Implemented
 
 * User Pool Management - refers to the process of managing users who are available for chat.
+
 * Chat Matching - the process of pairing users from the pool for a chat session.
+
 * Message Management - involves handling the sending and receiving of messages in a chat session.
+
 * Connection Management - refers to managing a user's connection to the chat. Users can disconnect from the chat or skip the current interlokutor.
+
 * Error Handling - involves managing errors.
 
 ## Technologies
