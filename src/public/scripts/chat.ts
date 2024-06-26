@@ -110,10 +110,14 @@ export default async function setupChat(onDisconnect: () => void, onSkip: () => 
 
                             chatMessages.appendChild(messageDiv);
                         });
-                        setTimeout(getMessagesLoop, 5000);
+                        setTimeout(getMessagesLoop, 0);
                     }
                 } else {
-                    if (response.status === 'info') console.info(response.message);
+                    if (response.status === 'info' && response.code === InfoCode.Timeout) {
+                        console.info(response.message);
+                        setTimeout(getMessagesLoop, 0);
+                    }
+                    else if (response.status === 'info' && response.code === InfoCode.ConversationNotFound) console.info(response.message);
                     else throw new Error(response.message);
                 }
             } catch (err) {

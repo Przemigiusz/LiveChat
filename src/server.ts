@@ -115,8 +115,22 @@ function getMessages(userId: string, latestMessageTimestamp: number): Promise<Ch
     return new Promise((resolve, reject) => {
         const match = matched.find(match => match[0].id === userId || match[1].id === userId);
         if (match) {
-            const messages: ChatMessage[] = match[2].filter(message => message.timestamp > latestMessageTimestamp);
-            resolve(messages);
+            const interval = 1000;
+
+            let counter = 0;
+            const timeout = 60;
+
+            const messagesInterval = setInterval(() => {
+                const messages: ChatMessage[] = match[2].filter(message => message.timestamp > latestMessageTimestamp);
+                if (messages.length > 0) {
+                    clearInterval(messagesInterval);
+                    resolve(messages);
+                } else if (counter >= timeout) {
+                    clearInterval(messagesInterval);
+                    reject(InfoCode.Timeout);
+                }
+                ++counter;
+            }, interval);
         } else {
             reject(InfoCode.ConversationNotFound);
         }
