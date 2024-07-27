@@ -21,7 +21,7 @@ This is a web application project that allows You to talk to people over the Int
 
 ## How To Run
 
-1. Clone the repository: `https://github.com/Przemigiusz/LiveChat.git`
+1. Clone the repository: `https://github.com/przemyslawrutkowski/LiveChat.git`
 2. Navigate into the project directory: `cd LiveChat`
 3. Install required dependencies: `npm install`
 4. Run the Typescript compiler: `npx tsc`
