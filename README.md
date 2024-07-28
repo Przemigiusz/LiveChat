@@ -25,5 +25,5 @@ This is a web application project that allows You to talk to people over the Int
 2. Navigate into the project directory: `cd LiveChat`
 3. Install required dependencies: `npm install`
 4. Run the Typescript compiler: `npx tsc`
-5. Run the main script (from root directory): `node ./src/server.js`
-6. Open `localhost:5000` in a browser.
+5. Run the main script: `node ./src/server.js`
+6. Open `localhost:5000` in a browser
